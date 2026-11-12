@@ -1,8 +1,10 @@
-import { FilesetResolver, PoseLandmarker } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/vision_bundle.mjs';
+import { FilesetResolver, PoseLandmarker, HandLandmarker } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/vision_bundle.mjs';
 import { LM, SIDE_IDX, LandmarkSmoother } from './metrics.js';
 
 const WASM = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm';
 const MODEL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task';
+const HAND_MODEL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+const HAND_EDGES = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12], [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [0, 17], [17, 18], [18, 19], [19, 20]];
 const TEAL = '#2fd3c4';
 const MIN_VIS = 0.4;
 const LOST_AFTER = 0.5;
@@ -15,6 +17,52 @@ const BASE_EDGES = [
 const BASE_JOINTS = [LM.NOSE, LM.L_EAR, LM.R_EAR, LM.L_SH, LM.R_SH, LM.L_EL, LM.R_EL, LM.L_WR, LM.R_WR, LM.L_HIP, LM.R_HIP];
 
 let landmarkerPromise = null;
+let handPromise = null;
+
+// Dedicated hand model: 21 3D points per hand. The pose model's 3 hand points are
+// too coarse to tell palm-up from palm-back, which is what straight-arm rotation needs.
+async function loadHandLandmarker() {
+  const fileset = await FilesetResolver.forVisionTasks(WASM);
+  const make = (delegate) => HandLandmarker.createFromOptions(fileset, {
+    baseOptions: { modelAssetPath: HAND_MODEL, delegate },
+    runningMode: 'VIDEO',
+    numHands: 2,
+    minHandDetectionConfidence: 0.4,
+    minHandPresenceConfidence: 0.4,
+    minTrackingConfidence: 0.4,
+  });
+  try { return await make('GPU'); } catch (e) {
+    console.warn('[hand] GPU delegate failed, falling back to CPU', e);
+    return make('CPU');
+  }
+}
+
+// Assign detected hands to the pose's left/right wrist by image distance
+// (MediaPipe's own handedness label is unreliable with mirrored webcams).
+function matchHands(res, image) {
+  const out = {};
+  const hands = res?.landmarks || [];
+  if (!hands.length || !image) return out;
+  const cand = [];
+  for (let h = 0; h < hands.length; h++) {
+    const w = hands[h][0], m = hands[h][9];
+    const size = Math.hypot(m.x - w.x, m.y - w.y) || 0.02;
+    for (const side of ['L', 'R']) {
+      const pw = image[SIDE_IDX[side].wr];
+      if (!pw) continue;
+      const d = Math.hypot(pw.x - w.x, pw.y - w.y);
+      if (d < Math.max(0.08, 2.5 * size)) cand.push({ h, side, d });
+    }
+  }
+  cand.sort((a, b) => a.d - b.d);
+  const used = new Set();
+  for (const c of cand) {
+    if (used.has(c.h) || out[c.side]) continue;
+    used.add(c.h);
+    out[c.side] = { image: hands[c.h], world: res.worldLandmarks?.[c.h], score: res.handedness?.[c.h]?.[0]?.score ?? 0.8 };
+  }
+  return out;
+}
 
 async function loadLandmarker() {
   const fileset = await FilesetResolver.forVisionTasks(WASM);
@@ -40,7 +88,7 @@ function cameraError(e) {
 const visible = (p) => p && (p.visibility ?? 1) >= MIN_VIS;
 
 /** Draws the skeleton. `map(p)` converts a normalized landmark to canvas px; `s` scales stroke widths. */
-function drawSkeleton(ctx, lms, map, s, side) {
+function drawSkeleton(ctx, lms, map, s, side, hands) {
   const hi = side && SIDE_IDX[side];
   const pt = (i) => (visible(lms[i]) ? map(lms[i]) : null);
   ctx.save();
@@ -90,7 +138,22 @@ function drawSkeleton(ctx, lms, map, s, side) {
     // Hand fan (wrist -> pinky / index / thumb) and knuckle line: the rotation cue
     // used when the elbow is straight.
     const Pk = pt(hi.pinky), Ix = pt(hi.index), Th = pt(hi.thumb);
-    if (W && (Pk || Ix)) {
+    const hand = hands?.[side]?.image;
+    if (hand) {
+      const H = hand.map(map);
+      ctx.shadowBlur = 6 * s;
+      ctx.lineWidth = 2 * s;
+      ctx.beginPath();
+      for (const [a, b] of HAND_EDGES) { ctx.moveTo(H[a][0], H[a][1]); ctx.lineTo(H[b][0], H[b][1]); }
+      ctx.stroke();
+      // Knuckle line (index -> pinky): the rotation cue.
+      ctx.lineWidth = 4 * s;
+      ctx.beginPath(); ctx.moveTo(H[5][0], H[5][1]); ctx.lineTo(H[17][0], H[17][1]); ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = TEAL;
+      for (const P of H) { ctx.beginPath(); ctx.arc(P[0], P[1], 2.2 * s, 0, Math.PI * 2); ctx.fill(); }
+      ctx.shadowBlur = 14 * s;
+    } else if (W && (Pk || Ix)) {
       ctx.shadowBlur = 6 * s;
       ctx.lineWidth = 2.5 * s;
       ctx.beginPath();
@@ -122,6 +185,9 @@ export function createPoseTracker({ video, overlay }) {
   const status = (text, kind) => emit('status', text, kind);
 
   let landmarker = null;
+  let handLm = null;
+  let lastHands = {};
+  let handSmooth = { L: new LandmarkSmoother(21), R: new LandmarkSmoother(21) };
   let stream = null;
   let objectUrl = null;
   let running = false;
@@ -143,6 +209,8 @@ export function createPoseTracker({ video, overlay }) {
   function resetSmoothing() {
     smoothWorld = new LandmarkSmoother(33);
     smoothImage = new LandmarkSmoother(33);
+    handSmooth = { L: new LandmarkSmoother(21), R: new LandmarkSmoother(21) };
+    lastHands = {};
   }
 
   function applyMirror() {
@@ -170,6 +238,18 @@ export function createPoseTracker({ video, overlay }) {
     return { w, h, map: (p) => [ox + p.x * dw, oy + p.y * dh] };
   }
 
+  function detectHands(ts, image) {
+    if (!handLm) return {};
+    let res;
+    try { res = handLm.detectForVideo(video, ts); } catch (e) { console.warn('[hand] detect failed', e); return {}; }
+    const m = matchHands(res, image);
+    for (const side of ['L', 'R']) {
+      if (!m[side]?.world) { handSmooth[side] = new LandmarkSmoother(21); delete m[side]; continue; }
+      m[side].world = handSmooth[side].apply(m[side].world, ts);
+    }
+    return m;
+  }
+
   function drawOverlay(lms) {
     const m = displayMapping();
     if (!m) return;
@@ -179,7 +259,7 @@ export function createPoseTracker({ video, overlay }) {
     clearOverlay();
     if (!lms) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawSkeleton(ctx, lms, m.map, 1, highlight);
+    drawSkeleton(ctx, lms, m.map, 1, highlight, lastHands);
   }
 
   function process(now) {
@@ -205,8 +285,9 @@ export function createPoseTracker({ video, overlay }) {
       const image = smoothImage.apply(img, ts);
       const world = smoothWorld.apply(wld, ts);
       lastImage = image;
+      lastHands = detectHands(ts, image);
       drawOverlay(image);
-      emit('results', { world, image, t, fps });
+      emit('results', { world, image, hands: lastHands, t, fps });
     } else if (!lostFired && t - lastSeen > LOST_AFTER) {
       lostFired = true;
       tracking = false;
@@ -287,6 +368,9 @@ export function createPoseTracker({ video, overlay }) {
         throw new Error(msg);
       }
       status('Pose model ready', 'ready');
+      // Hand model is optional: load in the background, pose tracking works without it.
+      handPromise ||= loadHandLandmarker().catch((e) => { console.warn('[hand] model unavailable', e); handPromise = null; return null; });
+      handPromise.then((h) => { handLm = h; });
       return landmarker;
     },
 
@@ -366,6 +450,7 @@ export function createPoseTracker({ video, overlay }) {
     onStatus(cb) { cbs.status.push(cb); return () => { cbs.status = cbs.status.filter((f) => f !== cb); }; },
 
     get running() { return running; },
+    get handTracking() { return !!handLm; },
 
     capture() {
       const vw = video.videoWidth, vh = video.videoHeight;
@@ -376,7 +461,7 @@ export function createPoseTracker({ video, overlay }) {
       const g = c.getContext('2d');
       if (mirrored) { g.translate(vw, 0); g.scale(-1, 1); }
       g.drawImage(video, 0, 0, vw, vh);
-      if (lastImage) drawSkeleton(g, lastImage, (p) => [p.x * vw, p.y * vh], Math.max(1, vh / 540), highlight);
+      if (lastImage) drawSkeleton(g, lastImage, (p) => [p.x * vw, p.y * vh], Math.max(1, vh / 540), highlight, lastHands);
       return c.toDataURL('image/png');
     },
   };

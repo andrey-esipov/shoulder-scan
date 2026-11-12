@@ -127,7 +127,7 @@ export function torsoFrame(world) {
  * Full per-frame metrics for both sides.
  * world: 33 world landmarks; image: 33 normalized image landmarks.
  */
-export function computeMetrics(world, image, state) {
+export function computeMetrics(world, image, state, hands) {
   const T = torsoFrame(world);
   const shW = Math.hypot(image[LM.L_SH].x - image[LM.R_SH].x, image[LM.L_SH].y - image[LM.R_SH].y) || 1e-3;
   const midShImg = { x: (image[LM.L_SH].x + image[LM.R_SH].x) / 2, y: (image[LM.L_SH].y + image[LM.R_SH].y) / 2 };
@@ -142,7 +142,7 @@ export function computeMetrics(world, image, state) {
     const u = v3.norm(v3.sub(el, sh));
     const f = v3.norm(v3.sub(wr, el));
     const lat = s === 'R' ? T.latR : v3.scale(T.latR, -1);
-    const hand = handAxis(world, image, I);
+    const hand = handAxis3D(hands?.[s]) ?? handAxis(world, image, I);
     const k = armKinematics(u, f, { up: T.up, fwd: T.fwd, lat }, hand);
     if (state) applyHysteresis(k, state[s] ??= {});
     const vis = Math.min(image[I.sh].visibility ?? 1, image[I.el].visibility ?? 1, image[I.wr].visibility ?? 1);
@@ -153,7 +153,20 @@ export function computeMetrics(world, image, state) {
   return out;
 }
 
-/** Knuckle line (pinky->index) in world space, with a 0..1 confidence. */
+/**
+ * Knuckle line from the 21-point hand model: pinky MCP (17) -> index MCP (5), in
+ * metric 3D. Unlike the pose model's 3 hand points it resolves palm up vs palm back.
+ */
+function handAxis3D(h) {
+  const w = h?.world;
+  if (!w || w.length < 18) return null;
+  const d = v3.sub(toV(w[5]), toV(w[17]));
+  const len = v3.len(d);
+  const conf = clamp(h.score ?? 0.8, 0, 1) * smoothstep(len, 0.025, 0.045);
+  return conf > 0 ? { axis: v3.scale(d, 1 / len), conf } : null;
+}
+
+/** Fallback knuckle line (pinky->index) from the pose model's crude hand points. */
 function handAxis(world, image, I) {
   const pk = world[I.pinky], ix = world[I.index];
   if (!pk || !ix) return null;
@@ -164,15 +177,24 @@ function handAxis(world, image, I) {
   return conf > 0 ? { axis: v3.scale(d, 1 / len), conf } : null;
 }
 
+// Straight-arm roll spans roughly -150° (palm back, pronated) to +210° (palm up and
+// past it), so the angle wraps in the physically impossible zone below -150°.
+const WRAP_LO = -150;
+
 // Keep the reading on through brief confidence dips and ease source handovers.
 function applyHysteresis(k, st) {
   const on = st.valid ? k.rotationConf > 0.2 : k.rotationConf > 0.4;
   if (on && st.valid && st.rot != null) {
     let d = k.rotation - st.rot;
     d -= 360 * Math.round(d / 360);
-    // Low-confidence frames move the estimate less.
+    // Low-confidence frames move the estimate less. Unwrapped, so rolling past
+    // palm-up (~180°) keeps counting instead of jumping to -180°.
     k.rotation = st.rot + d * (0.35 + 0.65 * clamp(k.rotationConf, 0, 1));
+  } else if (on && k.rotation < WRAP_LO) {
+    k.rotation += 360;
   }
+  if (k.rotation > WRAP_LO + 400) k.rotation -= 360;
+  else if (k.rotation < WRAP_LO - 40) k.rotation += 360;
   st.valid = on;
   st.rot = on ? k.rotation : null;
   k.rotationValid = on;

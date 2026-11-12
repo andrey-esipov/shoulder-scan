@@ -152,6 +152,13 @@ function hikeFor(s, sm) {
   return clamp(((b - sm.neckGap) / b) * 100, -15, 60);
 }
 
+// The hand reading with a straight arm is shoulder rotation plus forearm twist
+// (~80° each way). Give the 3D model a plausible humeral share.
+function shoulderShare(sm) {
+  if (!sm.rotationValid || sm.rotationSource !== 'hand') return sm.rotation;
+  return clamp(sm.rotation * 0.55, -80, 110);
+}
+
 function handleMetrics(m, t) {
   const live = { lean: m.lean ?? 0, t, sides: {}, hike: {} };
   for (const s of ['L', 'R']) {
@@ -163,7 +170,7 @@ function handleMetrics(m, t) {
   app.live = live;
   const sm = live.sides[app.side];
   if (sm) {
-    anatomy.setPose({ elevation: sm.elevation, plane: sm.plane, rotation: sm.rotation, elbowFlex: sm.elbowFlex, hike: live.hike[app.side], rotationValid: sm.rotationValid });
+    anatomy.setPose({ elevation: sm.elevation, plane: sm.plane, rotation: shoulderShare(sm), elbowFlex: sm.elbowFlex, hike: live.hike[app.side], rotationValid: sm.rotationValid });
     arc.push(t, sm.elevation, sm.rotationValid ? sm.rotation : null);
   }
   examTick(live);
@@ -180,7 +187,7 @@ function updatePanels(live) {
   const hike = live.hike[app.side] ?? 0, lean = Math.abs(live.lean ?? 0);
   const lvl = (v, m) => (m.bad != null && v >= m.bad ? 'bad' : m.warn != null && v >= m.warn ? 'warn' : '');
   setMeas(measRows.elev, `${fmt(sm.elevation)}°`, sm.elevation / 180, '', `Plane: ${planeLabel(sm.elevation, sm.plane)} (${fmt(sm.plane)}°)`);
-  setMeas(measRows.rot, sm.rotationValid ? `${fmt(sm.rotation)}°` : 'show hand', sm.rotationValid ? (sm.rotation + 90) / 200 : 0, '', sm.rotationValid ? (sm.rotationSource === 'hand' ? 'Read from hand · keep wrist neutral' : 'Read from forearm') : 'Bend elbow 90° or show your hand');
+  setMeas(measRows.rot, sm.rotationValid ? `${fmt(sm.rotation)}°` : 'show hand', sm.rotationValid ? clamp((sm.rotation + 150) / 360, 0, 1) : 0, '', sm.rotationValid ? (sm.rotationSource === 'hand' ? 'Arm roll from hand · includes forearm twist' : 'Shoulder rotation from forearm') : 'Bend elbow 90° or show your open hand');
   setMeas(measRows.flex, `${fmt(sm.elbowFlex)}°`, sm.elbowFlex / 160);
   setMeas(measRows.hike, app.baseline[app.side] ? `${fmt(hike)}%` : 'calibrating', Math.max(0, hike) / 40, lvl(hike, MEAS[3]));
   setMeas(measRows.lean, `${fmt(lean)}°`, lean / 30, lvl(lean, MEAS[4]));
@@ -193,9 +200,9 @@ function updatePanels(live) {
   }
 }
 
-pose.onResults(({ world, image, t }) => {
+pose.onResults(({ world, image, hands, t }) => {
   if (app.source === 'demo') return;
-  const m = computeMetrics(world, image, rotState);
+  const m = computeMetrics(world, image, rotState, hands);
   if (m) handleMetrics(m, t);
 });
 pose.onStatus((text, kind) => {

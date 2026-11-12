@@ -50,3 +50,34 @@ for (const [name, fr, u, axis, rot] of straight) {
 }
 assert.equal(armKinematics([0, -1, 0], [0, -1, 0], frameR).rotationValid, false, 'straight arm without hand is invalid');
 console.log(`hand rotation: ${straight.length} cases passed`);
+
+// Straight-arm roll from the 21-point hand model: arm out to the side at 90°,
+// palm down -> thumb up -> palm up -> past it. Reading must stay continuous past 180°.
+{
+  const { computeMetrics } = await import('../js/metrics.js');
+  const P = ([X, Y, Z]) => ({ x: X, y: -Y, z: -Z, visibility: 1 });
+  const world = Array.from({ length: 33 }, () => P([0, 0, 0]));
+  Object.assign(world, {
+    0: P([0, 0.25, 0.1]), 11: P([-0.18, 0, 0]), 12: P([0.18, 0, 0]),
+    13: P([-0.18, -0.3, 0]), 14: P([0.48, 0, 0]), 15: P([-0.18, -0.55, 0]), 16: P([0.74, 0, 0]),
+    23: P([-0.1, -0.5, 0]), 24: P([0.1, -0.5, 0]),
+  });
+  const image = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, visibility: 1 }));
+  Object.assign(image, { 11: { x: 0.6, y: 0.4, visibility: 1 }, 12: { x: 0.4, y: 0.4, visibility: 1 }, 23: { x: 0.55, y: 0.7, visibility: 1 }, 24: { x: 0.45, y: 0.7, visibility: 1 } });
+  const handAt = (deg) => {
+    const r = deg * Math.PI / 180, a = [0, Math.sin(r), Math.cos(r)];
+    const w = Array.from({ length: 21 }, () => P([0, 0, 0]));
+    w[5] = P(a.map((c) => c * 0.035)); w[17] = P(a.map((c) => c * -0.035));
+    return { R: { world: w, score: 0.9 } };
+  };
+  const state = {};
+  for (let deg = -120; deg <= 210; deg += 10) {
+    let m;
+    for (let i = 0; i < 6; i++) m = computeMetrics(world, image, state, handAt(deg)).sides.R;
+    assert.ok(m.rotationValid, `valid at ${deg}`);
+    near(m.rotation, deg, 2, `roll ${deg}`);
+  }
+  // Fresh acquisition just past palm-up reads as ER, not -170.
+  near(computeMetrics(world, image, {}, handAt(190)).sides.R.rotation, 190, 1, 'acquire 190');
+  console.log('hand-model roll sweep ok');
+}
