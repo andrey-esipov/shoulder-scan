@@ -87,6 +87,21 @@ function drawSkeleton(ctx, lms, map, s, side) {
     if (S && E) { ctx.moveTo(S[0], S[1]); ctx.lineTo(E[0], E[1]); }
     if (E && W) { ctx.moveTo(E[0], E[1]); ctx.lineTo(W[0], W[1]); }
     ctx.stroke();
+    // Hand fan (wrist -> pinky / index / thumb) and knuckle line: the rotation cue
+    // used when the elbow is straight.
+    const Pk = pt(hi.pinky), Ix = pt(hi.index), Th = pt(hi.thumb);
+    if (W && (Pk || Ix)) {
+      ctx.shadowBlur = 6 * s;
+      ctx.lineWidth = 2.5 * s;
+      ctx.beginPath();
+      for (const P of [Pk, Ix, Th]) if (P) { ctx.moveTo(W[0], W[1]); ctx.lineTo(P[0], P[1]); }
+      if (Pk && Ix) { ctx.moveTo(Pk[0], Pk[1]); ctx.lineTo(Ix[0], Ix[1]); }
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = TEAL;
+      for (const P of [Pk, Ix, Th]) if (P) { ctx.beginPath(); ctx.arc(P[0], P[1], 3 * s, 0, Math.PI * 2); ctx.fill(); }
+      ctx.shadowBlur = 14 * s;
+    }
     ctx.fillStyle = '#ffffff';
     for (const P of [S, E, W]) {
       if (!P) continue;

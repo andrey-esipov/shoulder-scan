@@ -5,12 +5,13 @@
 export const LM = {
   NOSE: 0, L_EAR: 7, R_EAR: 8,
   L_SH: 11, R_SH: 12, L_EL: 13, R_EL: 14, L_WR: 15, R_WR: 16,
+  L_PINKY: 17, R_PINKY: 18, L_INDEX: 19, R_INDEX: 20, L_THUMB: 21, R_THUMB: 22,
   L_HIP: 23, R_HIP: 24,
 };
 
 export const SIDE_IDX = {
-  L: { sh: LM.L_SH, el: LM.L_EL, wr: LM.L_WR, ear: LM.L_EAR, hip: LM.L_HIP },
-  R: { sh: LM.R_SH, el: LM.R_EL, wr: LM.R_WR, ear: LM.R_EAR, hip: LM.R_HIP },
+  L: { sh: LM.L_SH, el: LM.L_EL, wr: LM.L_WR, ear: LM.L_EAR, hip: LM.L_HIP, pinky: LM.L_PINKY, index: LM.L_INDEX, thumb: LM.L_THUMB },
+  R: { sh: LM.R_SH, el: LM.R_EL, wr: LM.R_WR, ear: LM.R_EAR, hip: LM.R_HIP, pinky: LM.R_PINKY, index: LM.R_INDEX, thumb: LM.R_THUMB },
 };
 
 export const DEG = 180 / Math.PI;
@@ -58,8 +59,11 @@ export function carry(v, a, b, fallbackAxis) {
  * Arm kinematics in a torso frame given as unit vectors.
  * u: unit upper-arm vector (shoulder->elbow); f: unit forearm vector (elbow->wrist)
  * frame: { up, fwd, lat } where lat is lateral-OUT for this side.
+ * hand (optional): { axis, conf } where axis is the unit knuckle line (pinky->index)
+ * and conf is 0..1 landmark confidence. It lets us read humeral rotation when the
+ * elbow is straight and the forearm itself carries no rotation information.
  */
-export function armKinematics(u, f, frame) {
+export function armKinematics(u, f, frame, hand) {
   const { up, fwd, lat } = frame;
   const down = v3.scale(up, -1);
   const elevation = angleBetween(u, down);
@@ -71,10 +75,26 @@ export function armKinematics(u, f, frame) {
   // Neutral forearm direction and external-rotation direction carried with the arm.
   const e0 = v3.norm(v3.perp(carry(fwd, down, u, lat), u));
   const e1 = v3.norm(v3.perp(carry(lat, down, u, fwd), u));
+
+  // Forearm method: the bent forearm swings around the humerus like a clock hand.
   const fp = v3.perp(f, u);
-  const rotationValid = elbowFlex > 40 && v3.len(fp) > 0.35;
-  const rotation = Math.atan2(v3.dot(fp, e1), v3.dot(fp, e0)) * DEG; // + = external rotation
-  return { elevation, plane, elbowFlex, rotation, rotationValid, comps: { lat: aLat, up: aUp, fwd: aFwd } };
+  const wF = smoothstep(elbowFlex, 20, 50) * smoothstep(v3.len(fp), 0.25, 0.5);
+  // Hand method: with the arm straight, the knuckle line (index ahead of pinky at
+  // neutral, palm to thigh) turns with the humerus. It also includes forearm
+  // pronation, so it only takes over when the forearm method has nothing to read.
+  let wH = 0, hp = null;
+  if (hand?.axis && hand.conf > 0) {
+    hp = v3.perp(hand.axis, u);
+    wH = hand.conf * (1 - smoothstep(elbowFlex, 30, 60)) * smoothstep(v3.len(hp), 0.35, 0.65);
+  }
+  let c = 0, s = 0;
+  if (wF > 0) { const n = v3.norm(fp); c += wF * v3.dot(n, e0); s += wF * v3.dot(n, e1); }
+  if (wH > 0) { const n = v3.norm(hp); c += wH * v3.dot(n, e0); s += wH * v3.dot(n, e1); }
+  const rotationConf = clamp(Math.max(wF, wH), 0, 1);
+  const rotation = rotationConf > 0 ? Math.atan2(s, c) * DEG : 0; // + = external rotation
+  const rotationSource = wF >= wH ? (wF > 0 ? 'forearm' : 'none') : 'hand';
+  const rotationValid = rotationConf > 0.35;
+  return { elevation, plane, elbowFlex, rotation, rotationValid, rotationConf, rotationSource, comps: { lat: aLat, up: aUp, fwd: aFwd } };
 }
 
 /** Classify the movement plane into a human label. */
@@ -107,7 +127,7 @@ export function torsoFrame(world) {
  * Full per-frame metrics for both sides.
  * world: 33 world landmarks; image: 33 normalized image landmarks.
  */
-export function computeMetrics(world, image) {
+export function computeMetrics(world, image, state) {
   const T = torsoFrame(world);
   const shW = Math.hypot(image[LM.L_SH].x - image[LM.R_SH].x, image[LM.L_SH].y - image[LM.R_SH].y) || 1e-3;
   const midShImg = { x: (image[LM.L_SH].x + image[LM.R_SH].x) / 2, y: (image[LM.L_SH].y + image[LM.R_SH].y) / 2 };
@@ -122,13 +142,40 @@ export function computeMetrics(world, image) {
     const u = v3.norm(v3.sub(el, sh));
     const f = v3.norm(v3.sub(wr, el));
     const lat = s === 'R' ? T.latR : v3.scale(T.latR, -1);
-    const k = armKinematics(u, f, { up: T.up, fwd: T.fwd, lat });
+    const hand = handAxis(world, image, I);
+    const k = armKinematics(u, f, { up: T.up, fwd: T.fwd, lat }, hand);
+    if (state) applyHysteresis(k, state[s] ??= {});
     const vis = Math.min(image[I.sh].visibility ?? 1, image[I.el].visibility ?? 1, image[I.wr].visibility ?? 1);
     // Neck-to-shoulder vertical gap (image), normalized. Shrinks when the shoulder hikes.
     const neckGap = (image[I.sh].y - image[I.ear].y) / shW;
-    out.sides[s] = { ...k, visibility: vis, neckGap, wristWorld: wr, u, f };
+    out.sides[s] = { ...k, visibility: vis, neckGap, wristWorld: wr, u, f, handConf: hand?.conf ?? 0 };
   }
   return out;
+}
+
+/** Knuckle line (pinky->index) in world space, with a 0..1 confidence. */
+function handAxis(world, image, I) {
+  const pk = world[I.pinky], ix = world[I.index];
+  if (!pk || !ix) return null;
+  const d = v3.sub(toV(ix), toV(pk));
+  const len = v3.len(d);
+  const vis = Math.min(image[I.pinky]?.visibility ?? 1, image[I.index]?.visibility ?? 1);
+  const conf = smoothstep(vis, 0.3, 0.7) * smoothstep(len, 0.012, 0.03);
+  return conf > 0 ? { axis: v3.scale(d, 1 / len), conf } : null;
+}
+
+// Keep the reading on through brief confidence dips and ease source handovers.
+function applyHysteresis(k, st) {
+  const on = st.valid ? k.rotationConf > 0.2 : k.rotationConf > 0.4;
+  if (on && st.valid && st.rot != null) {
+    let d = k.rotation - st.rot;
+    d -= 360 * Math.round(d / 360);
+    // Low-confidence frames move the estimate less.
+    k.rotation = st.rot + d * (0.35 + 0.65 * clamp(k.rotationConf, 0, 1));
+  }
+  st.valid = on;
+  st.rot = on ? k.rotation : null;
+  k.rotationValid = on;
 }
 
 /** One Euro filter for jitter-free but responsive landmarks. */

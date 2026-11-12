@@ -138,6 +138,8 @@ function setMeas(r, val, frac, level = '', sub) {
 const pose = createPoseTracker({ video: $('#video'), overlay: $('#overlay') });
 const arc = new ArcChart($('#arcChart'));
 let lastPanel = 0, lostSince = null;
+const rotState = {};
+const ROT_HINT = 'Elbow at your side bent 90°, or keep your hand in view, so I can read rotation';
 
 function hikeFor(s, sm) {
   if (!sm || sm.neckGap == null) return null;
@@ -178,7 +180,7 @@ function updatePanels(live) {
   const hike = live.hike[app.side] ?? 0, lean = Math.abs(live.lean ?? 0);
   const lvl = (v, m) => (m.bad != null && v >= m.bad ? 'bad' : m.warn != null && v >= m.warn ? 'warn' : '');
   setMeas(measRows.elev, `${fmt(sm.elevation)}°`, sm.elevation / 180, '', `Plane: ${planeLabel(sm.elevation, sm.plane)} (${fmt(sm.plane)}°)`);
-  setMeas(measRows.rot, sm.rotationValid ? `${fmt(sm.rotation)}°` : 'bend elbow', sm.rotationValid ? (sm.rotation + 90) / 200 : 0);
+  setMeas(measRows.rot, sm.rotationValid ? `${fmt(sm.rotation)}°` : 'show hand', sm.rotationValid ? (sm.rotation + 90) / 200 : 0, '', sm.rotationValid ? (sm.rotationSource === 'hand' ? 'Read from hand · keep wrist neutral' : 'Read from forearm') : 'Bend elbow 90° or show your hand');
   setMeas(measRows.flex, `${fmt(sm.elbowFlex)}°`, sm.elbowFlex / 160);
   setMeas(measRows.hike, app.baseline[app.side] ? `${fmt(hike)}%` : 'calibrating', Math.max(0, hike) / 40, lvl(hike, MEAS[3]));
   setMeas(measRows.lean, `${fmt(lean)}°`, lean / 30, lvl(lean, MEAS[4]));
@@ -193,7 +195,7 @@ function updatePanels(live) {
 
 pose.onResults(({ world, image, t }) => {
   if (app.source === 'demo') return;
-  const m = computeMetrics(world, image);
+  const m = computeMetrics(world, image, rotState);
   if (m) handleMetrics(m, t);
 });
 pose.onStatus((text, kind) => {
@@ -269,7 +271,7 @@ function startDemo() {
     for (const d of DEMO) { if (c < acc + d.dur) { seg = d; break; } acc += d.dur; }
     const a = seg.f((c - acc) / seg.dur);
     if (seg.name !== lastName) { lastName = seg.name; if (!run.active) $('#stageHud .hud-kicker').textContent = `Demo · ${seg.name}`; }
-    const mk = (x) => ({ elevation: x.elevation, plane: x.plane, rotation: x.rotation, elbowFlex: x.elbowFlex, rotationValid: x.elbowFlex > 35, visibility: 1, neckGap: 0.2 * (1 - x.hike / 100) });
+    const mk = (x) => ({ elevation: x.elevation, plane: x.plane, rotation: x.rotation, elbowFlex: x.elbowFlex, rotationValid: true, rotationSource: x.elbowFlex > 35 ? 'forearm' : 'hand', visibility: 1, neckGap: 0.2 * (1 - x.hike / 100) });
     const rest = { elevation: 12, plane: 0, rotation: 0, elbowFlex: 10, hike: 0 };
     handleMetrics({ lean: 2 * Math.sin(t), sides: { [app.side]: mk(a), [other(app.side)]: mk(rest) } }, t);
     demoRaf = requestAnimationFrame(loop);
@@ -569,7 +571,7 @@ function holdTick(t, rec, live, sides) {
     else {
       const v = metricOf(sm, g.metric), gate = gateOK(sm, g);
       if (gate !== true) hint = GATE_MSG[gate](g);
-      else if (v == null) hint = 'Bend your elbow to 90° so I can read rotation';
+      else if (v == null) hint = ROT_HINT;
       else if (g.min != null && v < g.min) hint = `${g.metric === 'rotation' ? 'Rotate out' : 'Raise'} to <b>${g.min}°</b> (now ${fmt(v)}°)`;
       else if (g.max != null && v > g.max) hint = `${g.metric === 'elevation' ? 'Lower' : 'Ease back'} to under <b>${g.max}°</b> (now ${fmt(v)}°)`;
     }
@@ -609,7 +611,7 @@ function repTick(t, rec, live, sides) {
   const gate = gateOK(sm, g);
   const v = metricOf(sm, g.metric);
   if (gate !== true) { cardProgress(run.counter.count / target, GATE_MSG[gate](g)); return; }
-  if (v == null) { cardProgress(run.counter.count / target, 'Bend your elbow to 90° so I can read rotation'); return; }
+  if (v == null) { cardProgress(run.counter.count / target, ROT_HINT); return; }
   const rep = run.counter.push(v, live.t);
   const label = t.sides === 'affectedFirst' ? `${SIDE_NAME[s]} arm · ` : '';
   const html = `${label}Rep <b>${Math.min(run.counter.count + 1, target)}/${target}</b> · ${g.metric} <b>${fmt(v)}°</b> → ${run.counter.state === 'down' ? `reach ${g.up}°` : `return below ${g.down}°`}`;
@@ -851,7 +853,7 @@ function coachTick(live) {
     }
   } else {
     const v = metricOf(sm, cfg.metric);
-    if (v == null) { setCue('Bend your elbow to 90° so I can read rotation', 'warn'); return; }
+    if (v == null) { setCue(ROT_HINT, 'warn'); return; }
     if (gate === true && coach.counter.push(v, live.t)) {
       count.textContent = String(coach.counter.count);
       if (coach.counter.count % 5 === 0) voice.speak(`${coach.counter.count}`);

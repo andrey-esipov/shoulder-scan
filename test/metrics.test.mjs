@@ -34,3 +34,19 @@ for (const [e, p, r, fl] of [[90, 0, 80, 90], [150, 40, -30, 70], [30, 90, 45, 1
   near(k.elevation, e, 0.5, 'inv.elev'); near(k.plane, p, 0.5, 'inv.plane'); near(k.rotation, r, 0.5, 'inv.rot'); near(k.elbowFlex, fl, 0.5, 'inv.flex');
 }
 console.log('armFromAngles inverse ok');
+
+// Straight arm: rotation is read from the knuckle line (pinky->index).
+const straight = [
+  ['side neutral, palm to thigh', frameR, [0, -1, 0], [0, 0, 1], 0],
+  ['side ER, palm forward', frameR, [0, -1, 0], [1, 0, 0], 90],
+  ['side IR, palm back', frameR, [0, -1, 0], [-0.7, 0, 0.7], -45],
+  ['abducted 90, palm down->up', frameR, [1, 0, 0], [0, 1, 0], 90],
+  ['LEFT side ER', frameL, [0, -1, 0], [-1, 0, 0], 90],
+];
+for (const [name, fr, u, axis, rot] of straight) {
+  const k = armKinematics(u, u, fr, { axis, conf: 1 });
+  assert.ok(k.rotationValid && k.rotationSource === 'hand', `${name}: hand rotation should be valid`);
+  near(k.rotation, rot, 1.5, `${name}.rotation`);
+}
+assert.equal(armKinematics([0, -1, 0], [0, -1, 0], frameR).rotationValid, false, 'straight arm without hand is invalid');
+console.log(`hand rotation: ${straight.length} cases passed`);
