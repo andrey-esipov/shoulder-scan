@@ -168,7 +168,8 @@ export function computeMetrics(world, image, state, hands) {
     const vis = Math.min(image[I.sh].visibility ?? 1, image[I.el].visibility ?? 1, image[I.wr].visibility ?? 1);
     // Neck-to-shoulder vertical gap (image), normalized. Shrinks when the shoulder hikes.
     const neckGap = (image[I.sh].y - image[I.ear].y) / shW;
-    out.sides[s] = { ...k, visibility: vis, neckGap, wristWorld: wr, u, f, handConf: hand?.conf ?? 0 };
+    const armVis = Math.min(image[I.sh].visibility ?? 1, image[I.el].visibility ?? 1);
+    out.sides[s] = { ...k, visibility: vis, armVis, wristVis: image[I.wr].visibility ?? 1, neckGap, wristWorld: wr, u, f, handConf: hand?.conf ?? 0 };
   }
   return out;
 }

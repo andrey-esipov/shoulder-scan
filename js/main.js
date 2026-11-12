@@ -183,15 +183,25 @@ function handleMetrics(m, t) {
   }
   app.live = live;
   const sm = live.sides[app.side];
-  if (sm) {
-    const os = live.sides[other(app.side)], tr = live.torso;
-    anatomy.setPose({
-      elevation: sm.elevation, plane: sm.plane, rotation: shoulderShare(sm), elbowFlex: sm.elbowFlex, hike: live.hike[app.side], rotationValid: sm.rotationValid,
-      other: os ? { elevation: os.elevation, plane: os.plane, rotation: os.rotationValid ? shoulderShare(os) : 0, elbowFlex: os.elbowFlex, hike: live.hike[other(app.side)] ?? 0 } : null,
-      torso: tr ? { yaw: clamp(tr.yaw, -60, 60), flex: clamp(tr.flex ?? 0, -30, 60), lean: clamp(tr.lean ?? 0, -30, 30) } : null,
-    });
-    arc.push(t, sm.elevation, sm.rotationValid ? sm.rotation : null);
-  }
+  // Drive the 3D figure from whatever is visible: torso always, each arm when its shoulder+elbow are seen
+  // (the wrist often leaves a laptop camera's frame with the arm out to the side).
+  const armPose = (x, s) => {
+    if (!x || (x.armVis ?? 1) < 0.4) return null;
+    const wristOk = (x.wristVis ?? 1) >= 0.35;
+    return {
+      elevation: x.elevation, plane: x.plane, hike: live.hike[s] ?? 0,
+      elbowFlex: wristOk ? x.elbowFlex : undefined,
+      rotation: wristOk && x.rotationValid ? shoulderShare(x) : undefined,
+      rotationValid: wristOk && x.rotationValid,
+    };
+  };
+  const tr = live.torso;
+  anatomy.setPose({
+    ...(armPose(m.sides?.[app.side], app.side) ?? {}),
+    other: armPose(m.sides?.[other(app.side)], other(app.side)),
+    torso: tr ? { yaw: clamp(tr.yaw, -60, 60), flex: clamp(tr.flex ?? 0, -30, 60), lean: clamp(tr.lean ?? 0, -30, 30) } : null,
+  });
+  if (sm) arc.push(t, sm.elevation, sm.rotationValid ? sm.rotation : null);
   examTick(live);
   coachTick(live);
   if (t - lastPanel > 0.08) { lastPanel = t; updatePanels(live); }

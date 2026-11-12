@@ -14,6 +14,7 @@ const SPA = 35 * RAD;
 const D = V(Math.cos(SPA), 0, Math.sin(SPA)); // in-plane lateral
 const Y = V(0, 1, 0);
 const N = V(-Math.sin(SPA), 0, Math.cos(SPA)); // plane normal, anteromedial
+const DEG2RAD = Math.PI / 180;
 const G = V(15, -3.5, -6); // glenoid centre
 const SC = V(1.8, 0.5, 3);
 const AC = V(16.5, 2.8, -4.5);
@@ -157,7 +158,7 @@ export function createAnatomy(container, { onHover } = {}) {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(30, 1, 1, 600);
-  const HOME = { pos: V(58, 10, 94), target: V(11, -9, -3) };
+  const HOME = { pos: V(38, 6, 150), target: V(3, -14, -3) };
   camera.position.copy(HOME.pos);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.copy(HOME.target);
@@ -179,8 +180,16 @@ export function createAnatomy(container, { onHover } = {}) {
   halo.rotation.x = -Math.PI / 2; halo.position.set(8, -62, 0);
   scene.add(halo);
 
+  // Trunk pivot at the pelvis: torso yaw / bend / side-bend rotate everything above it.
+  // Kept outside `root` so the left/right mirror (root.scale.x) doesn't flip the turn.
+  const PELVIS = V(0, -42, -1.5);
+  const trunk = new THREE.Group();
+  trunk.position.copy(PELVIS);
+  scene.add(trunk);
   const root = new THREE.Group();
-  scene.add(root);
+  root.position.copy(PELVIS).negate();
+  trunk.add(root);
+  const torsoT = { yaw: 0, flex: 0, lean: 0 }, torsoC = { yaw: 0, flex: 0, lean: 0 };
   const fibers = fiberTexture();
   const glowTex = glowTexture();
   const ringTex = ringTexture();
@@ -536,40 +545,43 @@ export function createAnatomy(container, { onHover } = {}) {
   // ---------- Pose solve ----------
   const target = { elevation: 8, plane: 30, rotation: 0, elbowFlex: 10, hike: 0 };
   const cur = { ...target };
-  let lastZ = V(0, 0, 1);
   const _m = new THREE.Matrix4(), _r = new THREE.Matrix4(), _a = V(0, 0, 0), _b = V(0, 0, 0);
   const clavAxis = new THREE.Vector3().subVectors(AC0, SC).normalize().cross(Y).normalize();
-  function solve() {
-    const elev = clamp(cur.elevation, 0, 180);
+  function armFrames(st, out) {
+    st._lastZ ||= V(0, 0, 1);
+    const elev = clamp(st.elevation, 0, 180);
     const upRot = clamp((elev - 25) * 0.38, 0, 55) * RAD;
     const tilt = -clamp((elev - 30) * 0.2, 0, 20) * RAD;
-    const clavEl = (upRot / RAD * 0.3 + clamp(cur.hike, 0, 40) * 0.35) * RAD;
+    const clavEl = (upRot / RAD * 0.3 + clamp(st.hike, 0, 40) * 0.35) * RAD;
     // Clavicle about SC
-    frames.C.makeTranslation(SC.x, SC.y, SC.z).multiply(_r.makeRotationAxis(clavAxis, clavEl)).multiply(_m.makeTranslation(-SC.x, -SC.y, -SC.z));
-    const acW = AC0.clone().applyMatrix4(frames.C);
+    out.C.makeTranslation(SC.x, SC.y, SC.z).multiply(_r.makeRotationAxis(clavAxis, clavEl)).multiply(_m.makeTranslation(-SC.x, -SC.y, -SC.z));
+    const acW = AC0.clone().applyMatrix4(out.C);
     // Scapula pivots at the AC joint
-    frames.S.makeTranslation(acW.x, acW.y, acW.z)
+    out.S.makeTranslation(acW.x, acW.y, acW.z)
       .multiply(_r.makeRotationAxis(N, upRot))
       .multiply(_m.makeRotationAxis(D, tilt))
       .multiply(new THREE.Matrix4().makeTranslation(-AC0.x, -AC0.y, -AC0.z));
-    const headW = HEAD.clone().applyMatrix4(frames.S);
+    const headW = HEAD.clone().applyMatrix4(out.S);
     // Humerus orientation from the arm angles
-    const { u, f } = armFromAngles(elev, cur.plane, cur.rotation, cur.elbowFlex);
+    const { u, f } = armFromAngles(elev, st.plane, st.rotation, st.elbowFlex);
     const y = V(-u[0], -u[1], -u[2]).normalize();
-    const f90 = armFromAngles(elev, cur.plane, cur.rotation, 90).f;
+    const f90 = armFromAngles(elev, st.plane, st.rotation, 90).f;
     const z = V(f90[0], f90[1], f90[2]);
     z.addScaledVector(y, -z.dot(y));
-    if (z.length() > 0.25) lastZ.copy(z.normalize()); else z.copy(lastZ).addScaledVector(y, -lastZ.dot(y)).normalize();
+    if (z.length() > 0.25) st._lastZ.copy(z.normalize()); else z.copy(st._lastZ).addScaledVector(y, -st._lastZ.dot(y)).normalize();
     const x = new THREE.Vector3().crossVectors(y, z).normalize();
-    frames.H.makeBasis(x, y, z).setPosition(headW);
+    out.H.makeBasis(x, y, z).setPosition(headW);
     // Forearm
-    const elbowW = ELBOW_H.clone().applyMatrix4(frames.H);
+    const elbowW = ELBOW_H.clone().applyMatrix4(out.H);
     const fy = V(-f[0], -f[1], -f[2]).normalize();
     const fx = x.clone().addScaledVector(fy, -x.dot(fy));
     if (fx.length() < 0.2) fx.copy(z).addScaledVector(fy, -z.dot(fy));
     fx.normalize();
     const fz = new THREE.Vector3().crossVectors(fx, fy);
-    frames.F.makeBasis(fx, fy, fz).setPosition(elbowW);
+    out.F.makeBasis(fx, fy, fz).setPosition(elbowW);
+  }
+  function solve() {
+    armFrames(cur, frames);
     for (const k of ['C', 'S', 'H', 'F']) { groups[k].matrix.copy(frames[k]); groups[k].matrixWorldNeedsUpdate = true; }
     // Soft tissue
     for (const d of dyn) {
@@ -579,7 +591,36 @@ export function createAnatomy(container, { onHover } = {}) {
       updateTube(d.geo, d.curve, d.radiusFn, d.flat);
     }
   }
+  // Opposite arm: mirrored clones of the bone/skin meshes, driven by its own angles.
+  const otherT = { elevation: 8, plane: 30, rotation: 0, elbowFlex: 10, hike: 0 }, otherC = { ...otherT };
+  const frames2 = { C: new THREE.Matrix4(), S: new THREE.Matrix4(), H: new THREE.Matrix4(), F: new THREE.Matrix4() };
+  const mirror = new THREE.Group();
+  mirror.scale.x = -1;
+  root.add(mirror);
+  const groups2 = {}, clones = [];
+  for (const k of ['C', 'S', 'H', 'F']) {
+    const g = new THREE.Group();
+    g.matrixAutoUpdate = false;
+    mirror.add(g);
+    groups2[k] = g;
+    groups[k].traverse((o) => {
+      if (!o.isMesh || o.material?.userData?.layer === 'muscle' || o.material?.userData?.layer === 'tendon' || o.material?.userData?.layer === 'nerve') return;
+      const c = new THREE.Mesh(o.geometry, o.material);
+      c.position.copy(o.position); c.quaternion.copy(o.quaternion); c.scale.copy(o.scale);
+      c.matrixAutoUpdate = o.matrixAutoUpdate; c.matrix.copy(o.matrix);
+      c.renderOrder = o.renderOrder;
+      c.raycast = () => {};
+      g.add(c);
+      clones.push([c, o]);
+    });
+  }
+  function solveOther() {
+    armFrames(otherC, frames2);
+    for (const k of ['C', 'S', 'H', 'F']) { groups2[k].matrix.copy(frames2[k]); groups2[k].matrixWorldNeedsUpdate = true; }
+    for (const [c, o] of clones) c.visible = o.visible;
+  }
   solve();
+  solveOther();
   for (const d of dyn) d.L0 = d.L;
 
   // ---------- Stress / strain tint ----------
@@ -674,6 +715,11 @@ export function createAnatomy(container, { onHover } = {}) {
     cur.rotation += (rotT - cur.rotation) * k;
     cur.elbowFlex += (target.elbowFlex - cur.elbowFlex) * k;
     cur.hike += (target.hike - cur.hike) * k;
+    for (const q of ['yaw', 'flex', 'lean']) torsoC[q] += (torsoT[q] - torsoC[q]) * k * 0.6;
+    for (const q of ['elevation', 'plane', 'rotation', 'elbowFlex', 'hike']) otherC[q] += (otherT[q] - otherC[q]) * k;
+    solveOther();
+    // Subject's right is +x and the chest faces +z (camera side).
+    trunk.rotation.set(torsoC.flex * DEG2RAD, -torsoC.yaw * DEG2RAD, -torsoC.lean * DEG2RAD, 'YXZ');
     solve();
     if (tween) {
       tween.t += dt / tween.dur;
@@ -694,6 +740,11 @@ export function createAnatomy(container, { onHover } = {}) {
     setPose(p = {}) {
       for (const k of ['elevation', 'plane', 'elbowFlex', 'hike']) if (Number.isFinite(p[k])) target[k] = p[k];
       if (Number.isFinite(p.rotation) && p.rotationValid !== false) target.rotation = p.rotation;
+      if (p.other) {
+        for (const q of ['elevation', 'plane', 'elbowFlex', 'hike']) if (Number.isFinite(p.other[q])) otherT[q] = p.other[q];
+        if (Number.isFinite(p.other.rotation) && p.other.rotationValid !== false) otherT.rotation = p.other.rotation;
+      }
+      if (p.torso) for (const q of ['yaw', 'flex', 'lean']) if (Number.isFinite(p.torso[q])) torsoT[q] = p.torso[q];
     },
     setSide(s) {
       const sign = s === 'L' ? -1 : 1;
