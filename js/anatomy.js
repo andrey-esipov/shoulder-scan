@@ -4,6 +4,7 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { armFromAngles, clamp, smoothstep } from './metrics.js';
 import {
   buildThorax, buildSkull, buildPelvis, buildClavicle, buildScapula, buildAcromion, buildCoracoid,
@@ -273,7 +274,8 @@ export function createAnatomy(container, { onHover } = {}) {
   const thoraxMat = boneMat();
   const thx = buildThorax();
   addMesh('T', thx.bone, thoraxMat, 'thorax', 'Spine & rib cage', 'bones', 3, 'Thoracic spine and ribs — the scapula glides over this surface.');
-  addMesh('T', thx.cartilage, mat('bone', 0xcfdde0, { roughness: 0.4, emissive: 0x0c1a20, emissiveIntensity: 0.4 }), 'thorax');
+  const cartMat = mat('bone', 0xcfdde0, { roughness: 0.4, emissive: 0x0c1a20, emissiveIntensity: 0.4 });
+  addMesh('T', thx.cartilage, cartMat, 'thorax');
   addMesh('T', buildSkull(), thoraxMat, 'thorax');
   // Pelvis and hips stay put while the trunk above them turns/bends.
   const fixed = new THREE.Group();
@@ -640,6 +642,47 @@ export function createAnatomy(container, { onHover } = {}) {
   solve();
   solveOther();
   for (const d of dyn) d.L0 = d.L;
+
+  // ---------- Real bones: CT-derived BodyParts3D meshes (DBCLS, CC BY-SA 2.1 JP), pre-rigged to the pose frames ----------
+  // The procedural bones above stay as the fallback until the GLB arrives.
+  const BONE_IDS = ['thorax', 'clavicle', 'scapula', 'acromion', 'coracoid', 'humerus', 'forearm'];
+  const boneMatFor = { cartilage: cartMat };
+  for (const id of BONE_IDS) boneMatFor[id] = STRUCT[id].meshes.at(-1).material;
+  new GLTFLoader().load(new URL('../assets/skeleton.glb', import.meta.url).href, (gltf) => {
+    if (disposed) return;
+    const proc = new Set(BONE_IDS.flatMap((id) => STRUCT[id].meshes));
+    gltf.scene.updateMatrixWorld(true);
+    const loaded = [];
+    gltf.scene.traverse((o) => {
+      if (!o.isMesh) return;
+      const ex = Object.keys(o.userData).length ? o.userData : o.parent?.userData || {};
+      if (!groups[ex.frame] || !ex.struct) return;
+      const src = o.geometry.attributes.position, p = new THREE.Vector3();
+      const arr = new Float32Array(src.count * 3);
+      for (let i = 0; i < src.count; i++) p.fromBufferAttribute(src, i).applyMatrix4(o.matrixWorld).toArray(arr, i * 3);
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+      geo.setIndex(o.geometry.index.clone());
+      geo.computeVertexNormals();
+      geo.computeBoundingSphere();
+      const id = ex.struct === 'cartilage' ? 'thorax' : ex.struct;
+      loaded.push(addMesh(ex.frame, geo, boneMatFor[ex.struct] || boneMatFor[id], id));
+    });
+    if (!loaded.length) return;
+    for (const m of proc) { m.parent?.remove(m); m.geometry.dispose(); }
+    for (const id of BONE_IDS) STRUCT[id].meshes = STRUCT[id].meshes.filter((m) => !proc.has(m));
+    for (let i = clones.length - 1; i >= 0; i--) if (proc.has(clones[i][1])) { clones[i][0].parent?.remove(clones[i][0]); clones.splice(i, 1); }
+    for (const m of loaded) {
+      const k = Object.keys(groups).find((g) => groups[g] === m.parent);
+      if (!groups2[k]) continue;
+      const c = new THREE.Mesh(m.geometry, m.material);
+      c.raycast = () => {};
+      groups2[k].add(c);
+      clones.push([c, m]);
+    }
+    applyVisibility();
+    solveOther();
+  }, undefined, (err) => console.warn('skeleton.glb failed; keeping procedural bones', err));
 
   // ---------- Stress / strain tint ----------
   const stress = {};

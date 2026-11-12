@@ -1,0 +1,7 @@
+assets/skeleton.glb is derived from BodyParts3D (decimated, re-posed and rigged to this app's pose frames).
+
+BodyParts3D, (c) The Database Center for Life Science licensed under CC Attribution-Share Alike 2.1 Japan
+https://lifesciencedb.jp/bp3d/
+https://creativecommons.org/licenses/by-sa/2.1/jp/deed.en
+
+This derived mesh file is distributed under the same license (CC BY-SA 2.1 JP).
