@@ -6,6 +6,7 @@ const MODEL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/p
 const HAND_MODEL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
 const HAND_EDGES = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12], [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [0, 17], [17, 18], [18, 19], [19, 20]];
 const TEAL = '#2fd3c4';
+const VIOLET = '#a78bfa';
 const MIN_VIS = 0.4;
 const LOST_AFTER = 0.5;
 
@@ -98,11 +99,20 @@ function drawSkeleton(ctx, lms, map, s, side, hands) {
   ctx.lineWidth = 2 * s;
   ctx.beginPath();
   for (const [a, b] of BASE_EDGES) {
-    if (hi && ((a === hi.sh && b === hi.el) || (a === hi.el && b === hi.wr))) continue;
+    if (hi && [SIDE_IDX.L, SIDE_IDX.R].some((q) => (a === q.sh && b === q.el) || (a === q.el && b === q.wr))) continue;
     const A = pt(a), B = pt(b);
     if (!A || !B) continue;
     ctx.moveTo(A[0], A[1]);
     ctx.lineTo(B[0], B[1]);
+  }
+  ctx.stroke();
+  // Shoulder and hip lines carry the torso turn; draw them heavier.
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+  ctx.lineWidth = 3.5 * s;
+  ctx.beginPath();
+  for (const [a, b] of [[LM.L_SH, LM.R_SH], [LM.L_HIP, LM.R_HIP]]) {
+    const A = pt(a), B = pt(b);
+    if (A && B) { ctx.moveTo(A[0], A[1]); ctx.lineTo(B[0], B[1]); }
   }
   ctx.stroke();
   ctx.fillStyle = 'rgba(255,255,255,0.6)';
@@ -113,7 +123,10 @@ function drawSkeleton(ctx, lms, map, s, side, hands) {
     ctx.arc(P[0], P[1], 2.5 * s, 0, Math.PI * 2);
     ctx.fill();
   }
-  if (hi) {
+  // Both arms: the focus side in teal, the other in violet.
+  for (const sd of side ? [side === 'L' ? 'R' : 'L', side] : []) {
+    const hi = SIDE_IDX[sd], primary = sd === side, C = primary ? TEAL : VIOLET;
+    ctx.globalAlpha = primary ? 1 : 0.85;
     const S = pt(hi.sh), E = pt(hi.el), W = pt(hi.wr), H = pt(hi.hip);
     if (S && E && H) {
       const a0 = Math.atan2(H[1] - S[1], H[0] - S[0]);
@@ -121,16 +134,16 @@ function drawSkeleton(ctx, lms, map, s, side, hands) {
       let d = a1 - a0;
       while (d > Math.PI) d -= 2 * Math.PI;
       while (d < -Math.PI) d += 2 * Math.PI;
-      ctx.strokeStyle = 'rgba(47,211,196,0.55)';
+      ctx.strokeStyle = primary ? 'rgba(47,211,196,0.55)' : 'rgba(167,139,250,0.5)';
       ctx.lineWidth = 2 * s;
       ctx.beginPath();
       ctx.arc(S[0], S[1], 26 * s, a0, a0 + d, d < 0);
       ctx.stroke();
     }
-    ctx.shadowColor = TEAL;
+    ctx.shadowColor = C;
     ctx.shadowBlur = 14 * s;
-    ctx.strokeStyle = TEAL;
-    ctx.lineWidth = 6 * s;
+    ctx.strokeStyle = C;
+    ctx.lineWidth = (primary ? 6 : 4.5) * s;
     ctx.beginPath();
     if (S && E) { ctx.moveTo(S[0], S[1]); ctx.lineTo(E[0], E[1]); }
     if (E && W) { ctx.moveTo(E[0], E[1]); ctx.lineTo(W[0], W[1]); }
@@ -138,7 +151,7 @@ function drawSkeleton(ctx, lms, map, s, side, hands) {
     // Hand fan (wrist -> pinky / index / thumb) and knuckle line: the rotation cue
     // used when the elbow is straight.
     const Pk = pt(hi.pinky), Ix = pt(hi.index), Th = pt(hi.thumb);
-    const hand = hands?.[side]?.image;
+    const hand = hands?.[sd]?.image;
     if (hand) {
       const H = hand.map(map);
       ctx.shadowBlur = 6 * s;
@@ -150,7 +163,7 @@ function drawSkeleton(ctx, lms, map, s, side, hands) {
       ctx.lineWidth = 4 * s;
       ctx.beginPath(); ctx.moveTo(H[5][0], H[5][1]); ctx.lineTo(H[17][0], H[17][1]); ctx.stroke();
       ctx.shadowBlur = 0;
-      ctx.fillStyle = TEAL;
+      ctx.fillStyle = C;
       for (const P of H) { ctx.beginPath(); ctx.arc(P[0], P[1], 2.2 * s, 0, Math.PI * 2); ctx.fill(); }
       ctx.shadowBlur = 14 * s;
     } else if (W && (Pk || Ix)) {
@@ -161,7 +174,7 @@ function drawSkeleton(ctx, lms, map, s, side, hands) {
       if (Pk && Ix) { ctx.moveTo(Pk[0], Pk[1]); ctx.lineTo(Ix[0], Ix[1]); }
       ctx.stroke();
       ctx.shadowBlur = 0;
-      ctx.fillStyle = TEAL;
+      ctx.fillStyle = C;
       for (const P of [Pk, Ix, Th]) if (P) { ctx.beginPath(); ctx.arc(P[0], P[1], 3 * s, 0, Math.PI * 2); ctx.fill(); }
       ctx.shadowBlur = 14 * s;
     }
@@ -169,12 +182,13 @@ function drawSkeleton(ctx, lms, map, s, side, hands) {
     for (const P of [S, E, W]) {
       if (!P) continue;
       ctx.beginPath();
-      ctx.arc(P[0], P[1], 5.5 * s, 0, Math.PI * 2);
+      ctx.arc(P[0], P[1], (primary ? 5.5 : 4.5) * s, 0, Math.PI * 2);
       ctx.fill();
       ctx.lineWidth = 2.5 * s;
       ctx.stroke();
     }
   }
+  ctx.globalAlpha = 1;
   ctx.restore();
 }
 

@@ -110,6 +110,8 @@ const MEAS = [
   { id: 'flex', label: 'Elbow bend', unit: '°', max: 160 },
   { id: 'hike', label: 'Shoulder hike', unit: '%', max: 40, warn: 12, bad: 20 },
   { id: 'lean', label: 'Trunk lean', unit: '°', max: 30, warn: 8, bad: 15 },
+  { id: 'torso', label: 'Torso turn', unit: '°', max: 60 },
+  { id: 'other', label: 'Other shoulder', unit: '°', max: 180 },
 ];
 const LOADS = [
   ['subacromial', 'Subacromial space'], ['internal', 'Internal impingement'], ['superiorLabrum', 'Superior labrum'],
@@ -159,8 +161,20 @@ function shoulderShare(sm) {
   return clamp(sm.rotation * 0.55, -80, 110);
 }
 
+// MediaPipe depth is noisy; ease torso angles so the 3D trunk doesn't jitter.
+const torsoSm = {};
+function smoothTorso(tp) {
+  if (!tp) return null;
+  for (const k of ['yaw', 'hipYaw', 'separation', 'flex', 'lean']) {
+    const v = tp[k];
+    torsoSm[k] = v == null ? null : torsoSm[k] == null ? v : torsoSm[k] + (v - torsoSm[k]) * 0.25;
+  }
+  return { ...torsoSm };
+}
+const turnLabel = (y) => (Math.abs(y) < 4 ? 'square to camera' : `${fmt(Math.abs(y))}° to your ${y > 0 ? 'left' : 'right'}`);
+
 function handleMetrics(m, t) {
-  const live = { lean: m.lean ?? 0, t, sides: {}, hike: {} };
+  const live = { lean: m.lean ?? 0, torso: m.torso ? smoothTorso(m.torso) : null, t, sides: {}, hike: {} };
   for (const s of ['L', 'R']) {
     const sm = m.sides?.[s];
     if (!sm || (sm.visibility != null && sm.visibility < 0.45)) { live.sides[s] = null; continue; }
@@ -170,7 +184,12 @@ function handleMetrics(m, t) {
   app.live = live;
   const sm = live.sides[app.side];
   if (sm) {
-    anatomy.setPose({ elevation: sm.elevation, plane: sm.plane, rotation: shoulderShare(sm), elbowFlex: sm.elbowFlex, hike: live.hike[app.side], rotationValid: sm.rotationValid });
+    const os = live.sides[other(app.side)], tr = live.torso;
+    anatomy.setPose({
+      elevation: sm.elevation, plane: sm.plane, rotation: shoulderShare(sm), elbowFlex: sm.elbowFlex, hike: live.hike[app.side], rotationValid: sm.rotationValid,
+      other: os ? { elevation: os.elevation, plane: os.plane, rotation: os.rotationValid ? shoulderShare(os) : 0, elbowFlex: os.elbowFlex, hike: live.hike[other(app.side)] ?? 0 } : null,
+      torso: tr ? { yaw: clamp(tr.yaw, -60, 60), flex: clamp(tr.flex ?? 0, -30, 60), lean: clamp(tr.lean ?? 0, -30, 30) } : null,
+    });
     arc.push(t, sm.elevation, sm.rotationValid ? sm.rotation : null);
   }
   examTick(live);
@@ -191,6 +210,11 @@ function updatePanels(live) {
   setMeas(measRows.flex, `${fmt(sm.elbowFlex)}°`, sm.elbowFlex / 160);
   setMeas(measRows.hike, app.baseline[app.side] ? `${fmt(hike)}%` : 'calibrating', Math.max(0, hike) / 40, lvl(hike, MEAS[3]));
   setMeas(measRows.lean, `${fmt(lean)}°`, lean / 30, lvl(lean, MEAS[4]));
+  const tr = live.torso;
+  if (tr) setMeas(measRows.torso, turnLabel(tr.yaw), Math.abs(tr.yaw) / 60, '', tr.separation != null ? `Hips ${turnLabel(tr.hipYaw)} · shoulder–hip coil ${fmt(Math.abs(tr.separation))}°${tr.flex != null ? ` · bend ${fmt(tr.flex)}°` : ''}` : 'Step back so your hips are in frame');
+  const os = live.sides[other(app.side)];
+  if (os) setMeas(measRows.other, `${fmt(os.elevation)}°`, os.elevation / 180, '', `${SIDE_NAME[other(app.side)]} · ${planeLabel(os.elevation, os.plane)}${os.rotationValid ? ` · rotation ${fmt(os.rotation)}°` : ''}`);
+  else setMeas(measRows.other, '–', 0, '', `${SIDE_NAME[other(app.side)]} arm out of view`);
   const idx = loadIndices(sm, { hike });
   anatomy.setStress(idx);
   for (const [id] of LOADS) { const v = idx[id] ?? 0; setMeas(loadRows[id], `${Math.round(v * 100)}%`, v, v > 0.7 ? 'bad' : v > 0.45 ? 'warn' : ''); }
@@ -280,7 +304,8 @@ function startDemo() {
     if (seg.name !== lastName) { lastName = seg.name; if (!run.active) $('#stageHud .hud-kicker').textContent = `Demo · ${seg.name}`; }
     const mk = (x) => ({ elevation: x.elevation, plane: x.plane, rotation: x.rotation, elbowFlex: x.elbowFlex, rotationValid: true, rotationSource: x.elbowFlex > 35 ? 'forearm' : 'hand', visibility: 1, neckGap: 0.2 * (1 - x.hike / 100) });
     const rest = { elevation: 12, plane: 0, rotation: 0, elbowFlex: 10, hike: 0 };
-    handleMetrics({ lean: 2 * Math.sin(t), sides: { [app.side]: mk(a), [other(app.side)]: mk(rest) } }, t);
+    const yaw = 25 * Math.sin(t * 0.6);
+    handleMetrics({ lean: 2 * Math.sin(t), torso: { yaw, hipYaw: yaw * 0.4, separation: yaw * 0.6, flex: 5, lean: 2 * Math.sin(t) }, sides: { [app.side]: mk(a), [other(app.side)]: mk(rest) } }, t);
     demoRaf = requestAnimationFrame(loop);
   };
   loop();

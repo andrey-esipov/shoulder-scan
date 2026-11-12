@@ -110,6 +110,26 @@ export function planeLabel(elevation, plane) {
 const toV = (p) => [p.x, -p.y, -p.z]; // MediaPipe world: y down, z toward camera negative.
 
 /** Build the torso frame from world landmarks. Returns null if shoulders are not visible. */
+/**
+ * Whole-trunk pose relative to the camera, in degrees.
+ * yaw: + = subject's right shoulder forward (turned to their left). hipYaw: same for the pelvis.
+ * separation = shoulder yaw - hip yaw (the tennis "X-factor" coil).
+ * flex: + = bending forward. lean: + = side-bend toward subject's right.
+ */
+export function torsoPose(world, T = torsoFrame(world)) {
+  const yawOf = (l, r) => {
+    const L = toV(world[l]), R = toV(world[r]);
+    return Math.atan2(R[2] - L[2], L[0] - R[0]) * DEG;
+  };
+  const yaw = yawOf(LM.L_SH, LM.R_SH);
+  const hipYaw = T.hipsVisible ? yawOf(LM.L_HIP, LM.R_HIP) : null;
+  const flex = T.hipsVisible ? Math.atan2(T.up[2], T.up[1]) * DEG : null;
+  // Side-bend measured across the body: project trunk axis on the shoulder line.
+  const latR = v3.norm(v3.sub(toV(world[LM.R_SH]), toV(world[LM.L_SH])));
+  const lean = T.hipsVisible ? Math.asin(clamp(v3.dot(T.up, latR), -1, 1)) * DEG : null;
+  return { yaw, hipYaw, separation: hipYaw == null ? null : yaw - hipYaw, flex, lean };
+}
+
 export function torsoFrame(world) {
   const ls = toV(world[LM.L_SH]), rs = toV(world[LM.R_SH]);
   const lh = toV(world[LM.L_HIP]), rh = toV(world[LM.R_HIP]);
@@ -135,7 +155,7 @@ export function computeMetrics(world, image, state, hands) {
   // Lateral trunk lean in the image plane; positive = leaning toward subject's right.
   const lean = Math.atan2(midShImg.x - midHipImg.x, midHipImg.y - midShImg.y) * DEG;
 
-  const out = { frame: T, lean: -lean, shoulderWidthImg: shW, sides: {} };
+  const out = { frame: T, lean: -lean, torso: torsoPose(world, T), shoulderWidthImg: shW, sides: {} };
   for (const s of ['L', 'R']) {
     const I = SIDE_IDX[s];
     const sh = toV(world[I.sh]), el = toV(world[I.el]), wr = toV(world[I.wr]);

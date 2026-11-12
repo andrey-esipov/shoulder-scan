@@ -81,3 +81,23 @@ console.log(`hand rotation: ${straight.length} cases passed`);
   near(computeMetrics(world, image, {}, handAt(190)).sides.R.rotation, 190, 1, 'acquire 190');
   console.log('hand-model roll sweep ok');
 }
+
+{
+  const { torsoPose } = await import('../js/metrics.js');
+  // Camera-frame point [X,Y,Z] (+Z toward camera) -> MediaPipe world landmark.
+  const P = ([X, Y, Z]) => ({ x: X, y: -Y, z: -Z, visibility: 1 });
+  const body = (yd, hd) => {
+    const w = Array.from({ length: 33 }, () => P([0, 0, 0]));
+    const r = (yd * Math.PI) / 180, h = (hd * Math.PI) / 180;
+    w[11] = P([0.18 * Math.cos(r), 0.4, -0.18 * Math.sin(r)]);
+    w[12] = P([-0.18 * Math.cos(r), 0.4, 0.18 * Math.sin(r)]);
+    w[23] = P([0.1 * Math.cos(h), -0.1, -0.1 * Math.sin(h)]);
+    w[24] = P([-0.1 * Math.cos(h), -0.1, 0.1 * Math.sin(h)]);
+    return w;
+  };
+  for (const [y, h] of [[0, 0], [35, 10], [-40, -10]]) {
+    const t = torsoPose(body(y, h));
+    assert.ok(Math.abs(t.yaw - y) < 0.5 && Math.abs(t.hipYaw - h) < 0.5 && Math.abs(t.separation - (y - h)) < 0.5, `torso ${y}/${h}`);
+  }
+  console.log('torso yaw ok');
+}
