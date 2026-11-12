@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Shoulder Scan — Webcam shoulder assessment</title>
+  <meta name="color-scheme" content="dark" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="js/main.js"></script>
+</head>
+<body>
+<div id="app">
+  <!-- ============ HEADER ============ -->
+  <header id="topbar">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 32 32" width="30" height="30" aria-hidden="true">
+        <defs>
+          <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#2fd3c4" />
+            <stop offset="1" stop-color="#4b8bff" />
+          </linearGradient>
+        </defs>
+        <rect x="1" y="1" width="30" height="30" rx="9" fill="url(#lg)" opacity=".16" stroke="url(#lg)" stroke-opacity=".5" />
+        <circle cx="12.5" cy="11.5" r="4.2" fill="none" stroke="url(#lg)" stroke-width="2" />
+        <path d="M15.6 14.2 L22.5 23.5" stroke="url(#lg)" stroke-width="2.6" stroke-linecap="round" />
+        <path d="M8.5 13.5 C7 18 8 22 10.5 25" stroke="#2fd3c4" stroke-width="1.6" stroke-linecap="round" fill="none" opacity=".75" />
+        <circle cx="12.5" cy="11.5" r="1.4" fill="#2fd3c4" />
+      </svg>
+      <div class="brand-txt">
+        <div class="brand-name">Shoulder Scan</div>
+        <div class="brand-sub">Webcam shoulder assessment</div>
+      </div>
+    </div>
+
+    <div class="top-actions">
+      <div id="trackPill" class="pill" role="status" aria-live="polite"><span class="dot"></span><span class="txt">Camera off</span></div>
+      <span class="divider"></span>
+      <button id="btnDemo" class="btn ghost" type="button" title="Play a demo recording">
+        <svg viewBox="0 0 24 24" width="15" height="15"><path d="M7 5v14l12-7z" fill="currentColor"/></svg>Demo
+      </button>
+      <button id="btnUpload" class="btn ghost" type="button" title="Analyze a video file">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg>Video file
+      </button>
+      <input type="file" id="fileVideo" accept="video/*" hidden />
+      <button id="btnMirror" class="btn ghost" type="button" title="Mirror camera image">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v18M8 7 3 12l5 5V7zM16 7l5 5-5 5V7z"/></svg>Mirror
+      </button>
+      <button id="btnCapture" class="btn ghost" type="button" title="Capture a snapshot">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="18" height="14" rx="3"/><circle cx="12" cy="13" r="3.5"/><path d="M9 6l1.5-2h3L15 6"/></svg>Capture
+      </button>
+      <button id="btnHistory" class="btn ghost" type="button" title="Past sessions">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>History
+      </button>
+      <button id="btnVoiceToggle" class="btn icon ghost" type="button" title="Doctor voice on/off" aria-label="Toggle doctor voice">
+        <svg class="ico-on" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor" fill-opacity=".2"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+        <svg class="ico-off" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor" fill-opacity=".2"/><path d="M22 9l-6 6M16 9l6 6"/></svg>
+      </button>
+      <button id="btnCamera" class="btn primary" type="button">Start camera</button>
+    </div>
+  </header>
+
+  <!-- ============ LEFT PANEL ============ -->
+  <aside id="leftPanel" class="panel">
+    <section class="sec">
+      <h3 class="sec-title">View</h3>
+      <div id="sideToggle" class="seg-group" role="group" aria-label="Shoulder side"></div>
+      <div id="presets" class="chips"></div>
+      <div class="peel-row">
+        <label for="peel">Peel depth</label>
+        <span class="peel-hint">skin → bone</span>
+      </div>
+      <input type="range" id="peel" min="0" max="100" value="0" class="range" />
+      <div id="layers" class="layers"></div>
+    </section>
+
+    <section class="sec">
+      <h3 class="sec-title">Live measurements</h3>
+      <div id="measure" class="meas"></div>
+    </section>
+
+    <section class="sec">
+      <h3 class="sec-title">Load map</h3>
+      <div id="loadMap" class="meas"></div>
+    </section>
+  </aside>
+
+  <!-- ============ CENTER STAGE ============ -->
+  <main id="stage">
+    <div id="three"></div>
+    <div class="stage-vignette" aria-hidden="true"></div>
+
+    <div id="stageHud">
+      <div class="hud-kicker">Live anatomy</div>
+      <div id="hudTitle">Right shoulder</div>
+      <div id="hudSub">Start the camera or play the demo to mirror your arm</div>
+    </div>
+
+    <div id="holdRing" aria-live="polite">3</div>
+
+    <div id="camInset">
+      <div class="cam-tag"><span class="rec"></span>Camera</div>
+      <video id="video" playsinline muted autoplay></video>
+      <canvas id="overlay"></canvas>
+      <div id="camEmpty">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="6" width="14" height="12" rx="3"/><path d="m16.5 10 5-3v10l-5-3"/></svg>
+        <span>Camera off — press Start camera or Demo</span>
+      </div>
+    </div>
+
+    <div id="markerBar" role="toolbar" aria-label="Symptom markers">
+      <span class="mb-label">Mark</span>
+      <button type="button" data-marker="pain"><i style="background:#ff4b4b"></i>Pain <kbd>Space</kbd></button>
+      <button type="button" data-marker="click"><i style="background:#ffb547"></i>Click <kbd>C</kbd></button>
+      <button type="button" data-marker="pull"><i style="background:#b48cff"></i>Pull <kbd>L</kbd></button>
+      <button type="button" data-marker="unstable"><i style="background:#4bb8ff"></i>Unstable <kbd>U</kbd></button>
+    </div>
+
+    <div id="arcWrap">
+      <div class="arc-legend">
+        <span class="lg-title">Arm motion</span>
+        <span class="lg dot"><i style="background:#ff4b4b"></i>Pain</span>
+        <span class="lg dot"><i style="background:#ffb547"></i>Click</span>
+        <span class="lg dot"><i style="background:#b48cff"></i>Pull</span>
+        <span class="lg dot"><i style="background:#4bb8ff"></i>Unstable</span>
+      </div>
+      <canvas id="arcChart"></canvas>
+    </div>
+
+    <div id="tooltip" role="tooltip"></div>
+  </main>
+
+  <!-- ============ RIGHT PANEL: DOCTOR ============ -->
+  <aside id="chatPanel" class="panel">
+    <div id="redFlagBanner" role="alert">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></svg>
+      <span class="rf-txt">Red-flag symptom reported — see a doctor promptly.</span>
+    </div>
+
+    <div class="chat-head">
+      <div class="doc-id">
+        <div class="doc-avatar" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 3v5a4 4 0 0 0 8 0V3"/><path d="M10 12v3a5 5 0 0 0 10 0v-2"/><circle cx="20" cy="11" r="2"/></svg>
+        </div>
+        <div>
+          <div class="doc-name">Your shoulder doctor</div>
+          <div class="doc-status"><span class="live-dot"></span>Screening exam · voice</div>
+        </div>
+      </div>
+      <button id="btnReport" class="btn sm" type="button">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h6"/></svg>View report
+      </button>
+    </div>
+
+    <div class="tabs-row">
+      <div class="tabs" role="tablist">
+        <button id="tabExam" class="tab active" type="button" role="tab">Exam</button>
+        <button id="tabRehab" class="tab" type="button" role="tab">Rehab coach</button>
+      </div>
+      <div class="exam-mode">
+        <button id="btnQuick" class="btn xs ghost" type="button" title="~4 minute screening">Quick exam</button>
+        <button id="btnFull" class="btn xs ghost" type="button" title="Full guided exam">Full exam</button>
+      </div>
+    </div>
+
+    <div id="examView" class="view">
+      <div id="testCard"></div>
+      <div id="chatLog" aria-live="polite"></div>
+      <form id="chatForm" autocomplete="off">
+        <div class="composer">
+          <input id="chatText" type="text" placeholder="Type or speak an answer…" aria-label="Your answer" />
+          <button id="btnMic" class="btn icon" type="button" title="Speak your answer" aria-label="Microphone">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+          </button>
+          <button class="btn icon primary send" type="submit" title="Send" aria-label="Send">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+        <div class="composer-sub">
+          <button id="btnPopMic" class="pop-toggle" type="button" title="Listen for clicks/pops with the microphone">
+            <span class="pt-sw"></span>Pop detector<span class="pop-meter"><i id="popLevel"></i></span>
+          </button>
+          <span class="hint">Enter to send · hold <kbd>Space</kbd> to mark pain</span>
+        </div>
+        <p class="disclaimer">Educational tool — not a medical diagnosis. Stop any movement that causes sharp pain.</p>
+      </form>
+    </div>
+
+    <div id="rehabView" class="view">
+      <div id="rehabCoach"></div>
+      <div id="rehabList"></div>
+    </div>
+  </aside>
+</div>
+
+<!-- ============ MODALS ============ -->
+<div id="reportModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="reportTitle">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div>
+        <h2 id="reportTitle">Shoulder report</h2>
+        <div id="reportMeta" class="modal-meta"></div>
+      </div>
+      <div class="modal-actions">
+        <button id="btnPrint" class="btn sm" type="button">Print</button>
+        <button id="btnExport" class="btn sm" type="button">Export</button>
+        <button id="btnCloseReport" class="btn icon sm ghost" type="button" aria-label="Close report">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+    </div>
+    <div id="reportBody" class="modal-body"></div>
+  </div>
+</div>
+
+<div id="historyModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="historyTitle">
+  <div class="modal-card narrow">
+    <div class="modal-head">
+      <div>
+        <h2 id="historyTitle">Session history</h2>
+        <div class="modal-meta">Saved locally in this browser</div>
+      </div>
+      <div class="modal-actions">
+        <button id="btnCloseHistory" class="btn icon sm ghost" type="button" aria-label="Close history">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+    </div>
+    <div id="historyBody" class="modal-body"></div>
+  </div>
+</div>
+
+<div id="toasts" aria-live="polite"></div>
+</body>
+</html>
