@@ -5,6 +5,10 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { armFromAngles, clamp, smoothstep } from './metrics.js';
+import {
+  buildThorax, buildSkull, buildPelvis, buildClavicle, buildScapula, buildAcromion, buildCoracoid,
+  buildHumerus, buildForearm, buildHandBones, buildHeadNeckTorsoSkin, buildHipSkin, buildUpperArmSkin, buildForearmSkin,
+} from './body-mesh.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const RAD = Math.PI / 180;
@@ -15,9 +19,9 @@ const D = V(Math.cos(SPA), 0, Math.sin(SPA)); // in-plane lateral
 const Y = V(0, 1, 0);
 const N = V(-Math.sin(SPA), 0, Math.cos(SPA)); // plane normal, anteromedial
 const DEG2RAD = Math.PI / 180;
-const G = V(15, -3.5, -6); // glenoid centre
+const G = V(17, -3.5, -6); // glenoid centre (biacromial width ≈ 39 cm)
 const SC = V(1.8, 0.5, 3);
-const AC = V(16.5, 2.8, -4.5);
+const AC = V(18.5, 2.8, -4.5);
 const HEAD = G.clone().addScaledVector(D, 2.4);
 /** Scapula coordinates: a = along the blade laterally, b = up, c = + anterior (rib side). */
 const sp = (a, b, c = 0) => G.clone().addScaledVector(D, a).addScaledVector(Y, b).addScaledVector(N, c);
@@ -158,14 +162,14 @@ export function createAnatomy(container, { onHover } = {}) {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(30, 1, 1, 600);
-  const HOME = { pos: V(38, 6, 150), target: V(3, -14, -3) };
+  const HOME = { pos: V(66, 0, 250), target: V(0, -34, 0) };
   camera.position.copy(HOME.pos);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.copy(HOME.target);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
   controls.minDistance = 22;
-  controls.maxDistance = 170;
+  controls.maxDistance = 300;
   controls.update();
 
   scene.add(new THREE.HemisphereLight(0xcfe3ff, 0x0b1220, 0.85));
@@ -177,7 +181,7 @@ export function createAnatomy(container, { onHover } = {}) {
   const halo = new THREE.Mesh(new THREE.CircleGeometry(46, 64), new THREE.MeshBasicMaterial({
     map: glowTexture(), color: 0x2fd3c4, transparent: true, opacity: 0.08, depthWrite: false,
   }));
-  halo.rotation.x = -Math.PI / 2; halo.position.set(8, -62, 0);
+  halo.rotation.x = -Math.PI / 2; halo.position.set(0, -73, 0);
   scene.add(halo);
 
   // Trunk pivot at the pelvis: torso yaw / bend / side-bend rotate everything above it.
@@ -265,41 +269,29 @@ export function createAnatomy(container, { onHover } = {}) {
   }
   const basisMatrix = (x, y, z, o) => new THREE.Matrix4().makeBasis(x, y, z).setPosition(o);
 
-  // ---------- Thorax (context, faint) ----------
+  // ---------- Axial skeleton: vertebral column, ribs, costal cartilage, sternum, skull, pelvis ----------
   const thoraxMat = boneMat();
-  for (let y = 16; y > -40; y -= 2.7) {
-    const g = new THREE.CylinderGeometry(1.25, 1.35, 1.7, 14);
-    g.translate(0, y, -9.6);
-    addMesh('T', g, thoraxMat, 'thorax', 'Spine & rib cage', 'bones', 3, 'Thoracic spine and ribs — the scapula glides over this surface.');
-  }
-  for (let k = 0; k < 10; k++) {
-    const yv = 8 - k * 3.1, w = 8.5 + Math.min(k, 5) * 1.25;
-    for (const s of [1, -1]) {
-      const pts = [[1.4 * s, yv, -9.2], [w * 0.7 * s, yv - 0.8, -11], [w * s, yv - 3, -4], [w * 0.86 * s, yv - 6, 4], [2.4 * s, yv - 8 - k * 0.3, 7.6]];
-      addMesh('T', staticTube(k > 7 ? pts.slice(0, 4) : pts, constant(0.42), 0.55, 30, 6), thoraxMat, 'thorax');
-    }
-  }
-  addMesh('T', staticTube([[0, 1, 4.6], [0, -8, 7.4], [0, -17, 8.2]], taper(1.6, 1.1), 0.35, 12, 10), thoraxMat, 'thorax');
+  const thx = buildThorax();
+  addMesh('T', thx.bone, thoraxMat, 'thorax', 'Spine & rib cage', 'bones', 3, 'Thoracic spine and ribs — the scapula glides over this surface.');
+  addMesh('T', thx.cartilage, mat('bone', 0xcfdde0, { roughness: 0.4, emissive: 0x0c1a20, emissiveIntensity: 0.4 }), 'thorax');
+  addMesh('T', buildSkull(), thoraxMat, 'thorax');
+  // Pelvis and hips stay put while the trunk above them turns/bends.
+  const fixed = new THREE.Group();
+  scene.add(fixed);
+  groups.P = fixed;
+  addMesh('P', buildPelvis(), thoraxMat, 'thorax');
 
   // ---------- Clavicle ----------
-  addMesh('C', staticTube([SC, [6, 1.6, 3.6], [11, 1.4, 0.4], [14, 1.3, -2.6], AC0], bone(0.62, 1.5), 0.85, 30, 12), boneMat(),
+  addMesh('C', buildClavicle(SC, AC0), boneMat(),
     'clavicle', 'Clavicle', 'bones', 3, 'Collarbone. Its strut keeps the shoulder out to the side; the AC joint is at its outer end.');
 
   // ---------- Scapula ----------
   const scapMat = boneMat();
-  const blade = new THREE.Shape();
-  [[-1.0, 2.2], [-3.2, 3.0], [-4.3, 2.4], [-6.5, 3.3], [-9.6, 4.3], [-11.0, 1.4], [-10.7, -5.5], [-8.2, -13.4], [-6.8, -11.5], [-3.6, -6.2], [-1.5, -3.0], [-0.9, -2.0]]
-    .forEach(([a, b], i) => (i ? blade.lineTo(a, b) : blade.moveTo(a, b)));
-  blade.closePath();
-  const bladeGeo = new THREE.ExtrudeGeometry(blade, { depth: 0.36, bevelEnabled: true, bevelThickness: 0.18, bevelSize: 0.22, bevelSegments: 2, curveSegments: 8 });
-  bladeGeo.applyMatrix4(basisMatrix(D, Y, N, sp(0, 0, -0.9)));
-  bladeGeo.computeVertexNormals();
-  addMesh('S', bladeGeo, scapMat, 'scapula', 'Scapula (shoulder blade)', 'bones', 3,
+  addMesh('S', buildScapula(sp, D, Y, N), scapMat, 'scapula', 'Scapula (shoulder blade)', 'bones', 3,
     'The shoulder blade. It must rotate upward and tilt back as you raise the arm; poor control here (dyskinesis) narrows the space for the cuff.');
-  addMesh('S', staticTube([sp(-10.8, 1.5, -1.0), sp(-6, 2.4, -2.1), sp(-2, 3.6, -2.7), sp(0.4, 4.8, -2.0)], taper(0.35, 0.65), 0.5, 20, 10), scapMat, 'scapula');
-  addMesh('S', staticTube([sp(-0.6, 4.6, -2.3), sp(1.4, 5.1, -1.2), sp(2.8, 5.0, 0.2), sp(3.4, 4.7, 1.5)], constant(1.25), 0.32, 16, 14), scapMat,
+  addMesh('S', buildAcromion(sp), scapMat,
     'acromion', 'Acromion', 'bones', 3, 'Roof of the shoulder. The supraspinatus tendon and bursa sit just beneath it — the classic impingement spot.');
-  addMesh('S', staticTube([sp(-1.6, 2.4, -0.2), sp(-1.2, 3.7, 1.6), sp(0.3, 3.2, 3.5)], taper(0.62, 0.42), 0.8, 14, 10), scapMat,
+  addMesh('S', buildCoracoid(sp, D), scapMat,
     'coracoid', 'Coracoid process', 'bones', 3, 'Hook of bone at the front; anchors the short head of biceps, pec minor and coracobrachialis.');
 
   // Glenoid socket + labrum (local frame: +Y -> medial(-D), +X -> up, +Z -> N; centred on the head)
@@ -333,27 +325,52 @@ export function createAnatomy(container, { onHover } = {}) {
   const hInfo = 'Upper-arm bone. The ball (head) should stay centred on the socket as you move.';
   addMesh('H', new THREE.SphereGeometry(2.45, 36, 24), mat('bone', 0xf2ead8, { roughness: 0.3, emissive: 0x1a1408, emissiveIntensity: 0.35 }),
     'humerus', 'Humerus (head)', 'bones', 3, hInfo);
-  addMesh('H', staticTube([[0.9, -1.4, 0], [1.15, -4, 0.1], [0.9, -15, 0.3], [0.5, -27.2, 0.25]], bone(1.05, 1.55), 1, 30, 14), humMat, 'humerus');
-  addMesh('H', ellipsoid([1.95, -0.9, 0.15], [1.2, 1.35, 1.25]), humMat, 'humerus');
-  addMesh('H', ellipsoid([0.55, -1.35, 1.75], [0.75, 0.9, 0.7]), humMat, 'humerus');
-  addMesh('H', ellipsoid([0.3, -28.8, 0.1], [3.1, 1.25, 1.45]), humMat, 'humerus');
+  addMesh('H', buildHumerus(), humMat, 'humerus');
 
-  // ---------- Forearm ----------
+  // ---------- Forearm & hand ----------
   const faMat = boneMat();
-  addMesh('F', staticTube([[-0.9, 2.3, -1.2], [-0.9, 0, -0.6], [-1.1, -12, -0.1], [-1.3, -24.5, 0]], bone(0.72, 1.5), 1, 26, 12), faMat,
+  addMesh('F', buildForearm(), faMat,
     'forearm', 'Radius & ulna', 'bones', 3, 'Forearm bones — the forearm direction tells the camera how far your arm is rotated.');
-  addMesh('F', staticTube([[1.1, -0.6, 0.4], [1.4, -10, 0.5], [1.9, -24, 0.5]], taper(0.62, 1.12), 1, 22, 12), faMat, 'forearm');
-  addMesh('F', ellipsoid([0.4, -26.6, 0.3], [2.6, 1.6, 1.1]), faMat, 'forearm');
+  addMesh('F', buildHandBones(), faMat, 'forearm');
 
-  // ---------- Skin ----------
-  const skinMat = mat('skin', 0xe0ab8f, { opacity: 0.14, roughness: 0.5 });
-  const skinInfo = 'Skin surface.';
-  addMesh('T', ellipsoid([0, -16, -1.5], [17.5, 27, 11.8], 48), skinMat, 'skin', 'Skin', 'skin', 0, skinInfo);
-  addMesh('T', staticTube([[0, 22, -3], [0, 8, -2.4]], constant(5.6), 0.9, 6, 24), skinMat, 'skin');
-  addMesh('H', ellipsoid([0.9, -2.2, 0], [5.4, 6.8, 5.2], 36), skinMat, 'skin');
-  addMesh('H', staticTube([[0.9, -5, 0], [0.5, -17, 0.2], [0.3, -29.5, 0.2]], spindle(4.7, 0.7, 0.4, 0.6), 1, 20, 24), skinMat, 'skin');
-  addMesh('F', staticTube([[0, 1.5, 0], [0.2, -12, 0.2], [0.3, -25, 0.2]], taper(4.1, 2.5), 0.85, 20, 24), skinMat, 'skin');
-  addMesh('F', ellipsoid([0.3, -31.5, 0.4], [3.8, 5.6, 1.5], 28), skinMat, 'skin');
+  // ---------- Skin: translucent with a fresnel rim so the silhouette reads clearly ----------
+  function skinMaterial(fade) {
+    const m = mat('skin', 0xe6b298, { opacity: 0.14, roughness: 0.5 });
+    m.onBeforeCompile = (sh) => {
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying float vSkinY;')
+        .replace('#include <project_vertex>', '#include <project_vertex>\nvSkinY = (modelMatrix * vec4(transformed, 1.0)).y;');
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying float vSkinY;')
+        .replace('#include <opaque_fragment>', `
+          float nv = abs(dot(normalize(normal), normalize(vViewPosition)));
+          float fres = pow(1.0 - nv, 2.6);
+          float a = diffuseColor.a, a5 = min(1.0, a * 5.0);
+          float alpha = mix(a * (0.5 + 0.5 * (1.0 - nv)), a, a * a) + a5 * fres * 0.6;
+          vec3 col = outgoingLight + vec3(0.42, 0.82, 1.0) * fres * 0.55 * a5;
+          ${fade ? 'alpha *= smoothstep(-67.0, -55.0, vSkinY);' : ''}
+          gl_FragColor = vec4(col, clamp(alpha, 0.0, 1.0));`);
+    };
+    m.customProgramCacheKey = () => (fade ? 'skin-fade' : 'skin');
+    return m;
+  }
+  const skinMat = skinMaterial(false), hipSkinMat = skinMaterial(true);
+  // Depth-only prepass: the translucent skin then shows a single clean outer surface.
+  const prepassMat = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: true, transparent: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+  mats.push(prepassMat);
+  function addSkin(frame, geo, m = skinMat) {
+    const mesh = addMesh(frame, geo, m, 'skin', 'Skin', 'skin', 0, 'Skin surface.');
+    const pre = new THREE.Mesh(geo, prepassMat);
+    pre.renderOrder = 4;
+    mesh.add(pre);
+    mesh.userData.prepass = pre;
+  }
+  const headTorso = buildHeadNeckTorsoSkin();
+  addSkin('T', headTorso.head);
+  addSkin('T', headTorso.torso);
+  addSkin('P', buildHipSkin(), hipSkinMat);
+  addSkin('H', buildUpperArmSkin());
+  addSkin('F', buildForearmSkin());
 
   // ---------- Muscles, tendons & nerves (live tubes through moving anchors) ----------
   const T_ = (p) => anchor('T', p), C_ = (p) => anchor('C', p), S_ = (p) => anchor('S', p), H_ = (p) => anchor('H', p), F_ = (p) => anchor('F', p);
@@ -425,7 +442,7 @@ export function createAnatomy(container, { onHover } = {}) {
     'Short head of biceps from the coracoid.');
   // Scapular stabilisers
   cord('trapUpper', 'Upper trapezius', 'muscles', 1, 'muscle', red, spindle(2.0, 0.35, 0.4), 0.35,
-    [T_([0.6, 19, -5.8]), T_([5, 12, -7.2]), C_([13.8, 1.9, -2.3])],
+    [T_([0.6, 18, -8.5]), T_([4.5, 11, -8.5]), C_([15.5, 1.9, -1.8])],
     'Shrugs the shoulder. Overactive upper trap (shoulder hiking) is a classic compensation for a weak cuff/lower trap.');
   cord('trapMid', 'Middle trapezius', 'muscles', 1, 'muscle', red, spindle(2.0, 0.4, 0.4), 0.28,
     [T_([0.5, -3, -10.6]), sa(-6.5, 2.4, -2.7), sa(-1, 3.9, -2.9)], 'Pulls the blades together; resists the arm dragging the blade forward.');
@@ -435,7 +452,7 @@ export function createAnatomy(container, { onHover } = {}) {
   cord('rhomboids', 'Rhomboids', 'muscles', 2, 'muscle', deep, spindle(1.5, 0.45, 0.5), 0.3,
     [T_([0.8, 5, -10.2]), T_([5, -2, -10.4]), sa(-10.8, -4, -0.9)], 'Hold the blade to the spine. Clicking under the blade can come from here (snapping scapula).');
   const serratusInfo = 'Serratus anterior — wraps the ribs and holds the blade flat. Weak serratus → winging, scapular clicking and impingement.';
-  for (const [a, b, rib] of [[-10.6, -1.5, [12, -10, 1]], [-10.2, -6.5, [13.2, -15, 3]], [-8.8, -11.5, [12.4, -21, 4.6]]]) {
+  for (const [a, b, rib] of [[-10.6, -1.5, [13.5, -10, 1.5]], [-10.2, -6.5, [14.6, -15, 2.5]], [-8.8, -11.5, [14, -21, 4]]]) {
     cord('serratus', 'Serratus anterior', 'muscles', 2, 'muscle', deep, spindle(1.3, 0.35, 0.4), 0.35,
       [sa(a, b, 1.0), T_([rib[0] - 2, rib[1] + 1, rib[2] - 6]), T_(rib)], serratusInfo, 24, 10);
   }
@@ -450,7 +467,7 @@ export function createAnatomy(container, { onHover } = {}) {
     [sa(-1.8, -3.6, 0.8), H_([-1.3, -3.6, 0]), H_([0, -4.6, -2.1]), H_([2.4, -5.2, -0.6])],
     'Wraps the neck of the humerus to the deltoid and teres minor.', 24, 8);
   cord('longThoracicN', 'Long thoracic nerve', 'nerves', 3, 'nerve', 0, constant(0.28), 1,
-    [T_([5, 8, -2.5]), T_([10.5, -4, -2]), T_([12.6, -18, 0.5])], 'Supplies serratus anterior; injury → winging.', 24, 8);
+    [T_([5, 8, -2.5]), T_([12, -4, -2]), T_([14.5, -18, 0.5])], 'Supplies serratus anterior; injury → winging.', 24, 8);
 
   // ---------- Stress glows ----------
   const GLOWS = {
@@ -501,6 +518,7 @@ export function createAnatomy(container, { onHover } = {}) {
         if (mt.transparent !== tr) { mt.transparent = tr; mt.needsUpdate = true; }
         mt.depthWrite = s.layer !== 'skin' && o > 0.6;
         m.renderOrder = s.layer === 'skin' ? 5 : tr ? 2 : 0;
+        if (m.userData.prepass) m.userData.prepass.visible = m.visible;
       }
     }
   }
@@ -510,18 +528,18 @@ export function createAnatomy(container, { onHover } = {}) {
     full: { layers: {}, cam: HOME },
     muscles: { layers: { skin: 0.06, nerves: 0.2, bones: 0.75, labrum: 0.3 }, cam: HOME },
     cuff: { layers: { skin: 0, muscles: 0.1, cuff: 1, tendons: 1, nerves: 0.15, labrum: 0.7 }, focus: ['supraspinatus', 'infraspinatus', 'teresMinor', 'subscapularis', 'bursa', 'bicepsLH'],
-      cam: { pos: V(44, 24, 42), target: V(14, -3, -4) } },
+      cam: { pos: V(46, 24, 42), target: V(16, -3, -4) } },
     labrum: { layers: { skin: 0, muscles: 0, cuff: 0.12, tendons: 1, nerves: 0, labrum: 1 }, focus: ['labrum', 'slap', 'bicepsLH', 'bursa'], ghost: { humerus: 0.14 },
-      cam: { pos: V(52, 6, 20), target: V(15, -2, -5) } },
+      cam: { pos: V(54, 6, 20), target: V(17, -2, -5) } },
     bones: { layers: { skin: 0, muscles: 0, cuff: 0, tendons: 0.25, nerves: 0, labrum: 0.9 }, cam: HOME },
     biceps: { layers: { skin: 0, muscles: 0.9, cuff: 0.3, tendons: 1, nerves: 0, labrum: 0.8 }, focus: ['bicepsLH', 'bicepsSH', 'slap', 'subscapularis'],
-      cam: { pos: V(30, 2, 72), target: V(14, -10, -1) } },
+      cam: { pos: V(32, 2, 72), target: V(16, -10, -1) } },
     lat: { layers: { skin: 0, muscles: 1, cuff: 0.6, nerves: 0 }, focus: ['lat', 'teresMajor', 'serratus', 'infraspinatus', 'teresMinor'],
-      cam: { pos: V(42, -6, -72), target: V(8, -14, -6) } },
+      cam: { pos: V(44, -6, -72), target: V(10, -14, -6) } },
     scapula: { layers: { skin: 0, muscles: 0.95, cuff: 0.4, nerves: 0 }, focus: ['serratus', 'trapUpper', 'trapMid', 'trapLower', 'rhomboids'],
-      cam: { pos: V(22, 30, -72), target: V(6, -6, -6) } },
+      cam: { pos: V(24, 30, -72), target: V(8, -6, -6) } },
     nerves: { layers: { skin: 0, muscles: 0.12, cuff: 0.15, nerves: 1, labrum: 0.4 }, focus: ['plexus', 'suprascapularN', 'axillaryN', 'longThoracicN'],
-      cam: { pos: V(40, 10, 60), target: V(10, -6, -2) } },
+      cam: { pos: V(42, 10, 60), target: V(12, -6, -2) } },
   };
   let side = 'R';
   let sideSign = 1;
@@ -617,7 +635,7 @@ export function createAnatomy(container, { onHover } = {}) {
   function solveOther() {
     armFrames(otherC, frames2);
     for (const k of ['C', 'S', 'H', 'F']) { groups2[k].matrix.copy(frames2[k]); groups2[k].matrixWorldNeedsUpdate = true; }
-    for (const [c, o] of clones) c.visible = o.visible;
+    for (const [c, o] of clones) { c.visible = o.visible; c.renderOrder = o.renderOrder; }
   }
   solve();
   solveOther();
