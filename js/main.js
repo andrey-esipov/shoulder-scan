@@ -206,21 +206,23 @@ pose.onLost(() => { if (run.active) $('#hudSub').textContent = 'Lost you. Step b
 
 /* ---------------- camera / video / demo ---------------- */
 let demoRaf = 0;
+const setSource = (id) => ['btnCamera', 'btnDemo', 'btnUpload'].forEach((b) => $(`#${b}`).classList.toggle('active', b === id));
 async function startCamera() {
   stopDemo();
   const btn = $('#btnCamera');
-  if (pose.running && app.source === 'camera') { pose.stop(); app.source = 'off'; btn.textContent = 'Start camera'; $('#camEmpty').classList.remove('hide'); return; }
-  btn.disabled = true; btn.textContent = 'Loading model…';
+  if (pose.running && app.source === 'camera') { pose.stop(); app.source = 'off'; btn.textContent = 'Camera'; btn.classList.remove('active'); $('#camEmpty').classList.remove('hide'); return; }
+  setSource(null);
+  btn.disabled = true; btn.textContent = 'Loading…';
   try {
     await pose.init();
     await pose.startCamera();
     app.source = 'camera';
     $('#camEmpty').classList.add('hide');
-    btn.textContent = 'Stop camera';
+    btn.textContent = 'Stop camera'; setSource('btnCamera');
     toast('Camera on. Stand about 2 m back, hips in frame');
   } catch (e) {
     console.error(e);
-    btn.textContent = 'Start camera';
+    btn.textContent = 'Camera';
     toast(`Camera unavailable: ${e.message || e}. Try Demo or upload a video.`, 'warn');
   } finally { btn.disabled = false; }
 }
@@ -229,7 +231,7 @@ async function loadVideo(file) {
   try {
     await pose.init();
     await pose.loadVideoFile(file);
-    app.source = 'video';
+    app.source = 'video'; setSource('btnUpload');
     $('#camEmpty').classList.add('hide');
     toast(`Analyzing ${file.name}`);
   } catch (e) { toast(`Couldn't load video: ${e.message || e}`, 'warn'); }
@@ -238,9 +240,9 @@ async function loadVideo(file) {
 // Synthetic arm motion so the model can be explored without a camera.
 const DEMO = [
   { name: 'Forward raise', dur: 4, f: (u) => ({ elevation: 15 + 150 * Math.sin(Math.PI * u), plane: 85, rotation: 10, elbowFlex: 8, hike: 6 * Math.sin(Math.PI * u) }) },
-  { name: 'Side raise (painful arc zone 60–120°)', dur: 4.5, f: (u) => ({ elevation: 15 + 155 * Math.sin(Math.PI * u), plane: 15, rotation: 20, elbowFlex: 6, hike: 14 * Math.sin(Math.PI * u) }) },
-  { name: '90/90 rotation (internal impingement zone)', dur: 4.5, f: (u) => ({ elevation: 90, plane: 10, rotation: 30 + 70 * Math.sin(2 * Math.PI * u), elbowFlex: 90, hike: 4 }) },
-  { name: 'Serve: trophy → contact → follow-through', dur: 3.5, f: (u) => {
+  { name: 'Side raise', dur: 4.5, f: (u) => ({ elevation: 15 + 155 * Math.sin(Math.PI * u), plane: 15, rotation: 20, elbowFlex: 6, hike: 14 * Math.sin(Math.PI * u) }) },
+  { name: '90/90 rotation', dur: 4.5, f: (u) => ({ elevation: 90, plane: 10, rotation: 30 + 70 * Math.sin(2 * Math.PI * u), elbowFlex: 90, hike: 4 }) },
+  { name: 'Serve motion', dur: 3.5, f: (u) => {
     const k = u < 0.55 ? u / 0.55 : 1, p = u < 0.55 ? 0 : (u - 0.55) / 0.45;
     return u < 0.55
       ? { elevation: 30 + 65 * k, plane: 5, rotation: 20 + 85 * k, elbowFlex: 40 + 60 * k, hike: 5 }
@@ -252,10 +254,10 @@ function startDemo() {
   if (pose.running) pose.stop();
   app.source = 'demo';
   app.baseline = { L: 0.2, R: 0.2 };
-  $('#btnDemo').classList.add('active');
-  $('#camEmpty span').textContent = 'Demo mode: synthetic arm motion';
+  setSource('btnDemo');
+  $('#camEmpty span').textContent = 'Synthetic motion';
   $('#camEmpty').classList.remove('hide');
-  $('#btnCamera').textContent = 'Start camera';
+  $('#btnCamera').textContent = 'Camera';
   const pill = $('#trackPill'); pill.classList.add('on'); pill.classList.remove('warn'); $('.txt', pill).textContent = 'Demo';
   const total = DEMO.reduce((a, d) => a + d.dur, 0);
   const t0 = now();
@@ -279,9 +281,9 @@ function stopDemo() {
   if (app.source !== 'demo') return;
   cancelAnimationFrame(demoRaf);
   app.source = 'off'; app.baseline = { L: null, R: null };
-  $('#btnDemo').classList.remove('active');
+  setSource(null);
   $('#stageHud .hud-kicker').textContent = 'Live anatomy';
-  $('#camEmpty span').textContent = 'Camera off — press Start camera or Demo';
+  $('#camEmpty span').textContent = 'Camera off';
   const pill = $('#trackPill'); pill.classList.remove('on'); $('.txt', pill).textContent = 'Camera off';
 }
 
@@ -652,7 +654,7 @@ async function runTest(t, i, n) {
   $('#hudTitle').textContent = t.title;
   $('#hudSub').textContent = t.steps[0].replace(/\*\*/g, '');
   arc.clear();
-  if (app.source === 'off') system('Camera is off. Press **Start camera** (or **Demo**) so I can measure. You can still press Done / Skip.');
+  if (app.source === 'off') system('Camera is off. Press **Camera** (or **Demo**) at the top so I can measure. You can still press Done / Skip.');
   await doctor(`**${t.title}.** ${t.say}`, { delay: 300 });
   run.phase = 'measure';
   const res = await new Promise((r) => (run.resolve = r));

@@ -157,7 +157,7 @@ export function createAnatomy(container, { onHover } = {}) {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(30, 1, 1, 600);
-  const HOME = { pos: V(46, 6, 70), target: V(11, -9, -3) };
+  const HOME = { pos: V(58, 10, 94), target: V(11, -9, -3) };
   camera.position.copy(HOME.pos);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.copy(HOME.target);

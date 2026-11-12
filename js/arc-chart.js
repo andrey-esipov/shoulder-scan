@@ -4,7 +4,7 @@ const MARK_COLORS = { pain: '#ff4b4b', click: '#ffb547', pull: '#b48cff', unstab
 const ELEV = { color: '#2fd3c4', min: 0, max: 180, label: 'Elevation' };
 const ROT = { color: '#9a8cff', min: -90, max: 120, label: 'Rotation' };
 const GRID = [60, 90, 120, 150];
-const PAD = { l: 34, r: 74, t: 22, b: 8 };
+const PAD = { l: 38, r: 74, t: 28, b: 12 };
 
 export class ArcChart {
   constructor(canvas) {
