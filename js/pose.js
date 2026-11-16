@@ -83,6 +83,7 @@ function cameraError(e) {
   if (n === 'NotAllowedError' || n === 'SecurityError') return 'Camera permission was denied. Allow camera access in your browser settings and try again.';
   if (n === 'NotFoundError' || n === 'OverconstrainedError') return 'No camera was found. Connect a webcam or load a video file instead.';
   if (n === 'NotReadableError' || n === 'AbortError') return 'The camera is in use by another application. Close it and try again.';
+  if (n === 'TimeoutError') return 'The camera did not respond. Answer the browser permission prompt, check System Settings → Privacy & Security → Camera for your browser, and close apps using the camera (Teams, Zoom).';
   return `Could not start the camera: ${e?.message || e}`;
 }
 
@@ -397,20 +398,37 @@ export function createPoseTracker({ video, overlay }) {
       await api.init();
       releaseSource();
       status('Starting camera…', 'loading');
+      const hint = setTimeout(() => status('Waiting for camera… allow access in the browser prompt, or close apps using it (Teams, Zoom)', 'loading'), 3000);
+      const withTimeout = (p, ms, what) => Promise.race([p, new Promise((_, rej) => setTimeout(() => {
+        const e = new Error(what); e.name = 'TimeoutError'; rej(e);
+      }, ms))]);
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 1280, height: 720, facingMode: 'user' }, audio: false,
-        });
+        const ask = (v) => {
+          const p = navigator.mediaDevices.getUserMedia({ video: v, audio: false });
+          return withTimeout(p, 20000, 'camera did not respond').catch((e) => {
+            // If the browser grants access after we gave up, release the camera instead of leaking it.
+            if (e.name === 'TimeoutError') p.then((s) => s.getTracks().forEach((t) => t.stop()), () => {});
+            throw e;
+          });
+        };
+        try {
+          stream = await ask({ width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' });
+        } catch (e) {
+          if (!['OverconstrainedError', 'NotReadableError', 'AbortError'].includes(e?.name)) throw e;
+          stream = await ask(true);
+        }
         video.muted = true;
         video.playsInline = true;
         video.loop = false;
         video.srcObject = stream;
-        await video.play();
+        await withTimeout(video.play(), 10000, 'camera stream did not start');
       } catch (e) {
         releaseSource();
         const msg = cameraError(e);
         status(msg, 'error');
         throw new Error(msg);
+      } finally {
+        clearTimeout(hint);
       }
       api.setMirror(true);
       await begin();
