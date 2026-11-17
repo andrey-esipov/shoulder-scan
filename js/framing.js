@@ -1,11 +1,12 @@
-// Perspective fit with a stable torso-centered target and room around every limb.
-export function fitAnatomyBounds(bounds, aspect, fov = 36, target = [0, -20, 0]) {
-  const halfWidth = Math.max(Math.abs(bounds.min.x - target[0]), Math.abs(bounds.max.x - target[0]));
-  const halfHeight = Math.max(Math.abs(bounds.min.y - target[1]), Math.abs(bounds.max.y - target[1]));
+// Fit the skull-to-pelvis core and upper arms, not the full fingertip envelope.
+export function fitAnatomyBounds(bounds, aspect, fov = 36) {
+  const target = ['x', 'y', 'z'].map((axis) => (bounds.min[axis] + bounds.max[axis]) / 2);
+  const halfWidth = (bounds.max.x - bounds.min.x) / 2;
+  const halfHeight = (bounds.max.y - bounds.min.y) / 2;
   const tan = Math.tan(fov * Math.PI / 360);
-  const depth = Math.max(0, bounds.max.z - target[2]);
+  const depth = (bounds.max.z - bounds.min.z) / 2;
   return {
     target,
-    distance: Math.max(halfWidth / (tan * Math.max(.1, aspect)), halfHeight / tan) * 1.14 + depth + 5,
+    distance: Math.max(halfWidth / (tan * Math.max(.1, aspect) * .96), halfHeight / (tan * .84)) + depth,
   };
 }

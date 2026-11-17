@@ -1008,7 +1008,7 @@ addEventListener('beforeunload', () => { pop?.stop(); pose.stop(); });
 /* ---------------- init ---------------- */
 buildLeftPanel();
 buildMeasure();
-$('#testCard').innerHTML = '<div class="tc-step">Guided shoulder screening</div><div class="tc-title">A clearer picture of your movement.</div><p class="tc-desc">Move gently. Mark what you feel. Start an exam when you’re ready.</p><div class="tc-progress"><i></i></div>';
+$('#testCard').innerHTML = '<div class="tc-title">A clearer picture of your movement.</div><p class="tc-desc">Move gently. Mark what you feel. Start an exam when you’re ready.</p><div class="tc-progress"><i></i></div>';
 $('#testCard').classList.add('show');
 setSide('R');
 applyPreset('full');

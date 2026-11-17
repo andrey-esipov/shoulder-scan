@@ -18,7 +18,7 @@ python3 -m http.server 8000
 
 Open http://localhost:8000. Click **Demo** to try it without a camera, or **Camera** to use your webcam. Stand about two meters back so your hips are in frame.
 
-For recordings, open http://localhost:8000/?demo=1 to start simulated anatomical motion automatically, without opening a camera. Add `&exam=quick` to begin the guided intake too (answers are still yours; it does not fabricate exam results). Demo gives the moving skeleton the full stage, with aspect-aware framing that keeps both arms and the torso visible. The grey, dashed source pill and readout strip explicitly label these as **simulated**, not measured, values.
+For recordings, open http://localhost:8000/?demo=1 to start simulated anatomical motion automatically, without opening a camera. Add `&exam=quick` to begin the guided intake too (answers are still yours; it does not fabricate exam results). Demo gives the moving skeleton the full stage, with aspect-aware framing around the torso, shoulders and upper arms; hands and forearms may extend beyond the stage during overhead motion. The grey, dashed source pill and grey-dot readout caption explicitly label these as **simulated**, not measured, values.
 
 The light, stage-first layout separates bilateral elevation, bilateral ER/IR and torso turn into a dedicated strip below the model. Camera mode keeps the real video and neutral pose overlay beside the anatomy and labels values **Measured**. Open **Anatomy** above the skeleton for side selection, presets, peel and layers; expand **Motion & tissue load** there for detailed readings. On phones the large anatomy leads, readings form a grid, markers are 2×2, and the exam is below the stage. **Report** opens an honest empty state until you have exam data.
 

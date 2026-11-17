@@ -92,7 +92,7 @@ strong, b { font-weight: 600; }
 .cam-btn { width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid var(--line-2); border-radius: 7px; background: #ffffffeb; color: var(--muted); }
 .cam-btn:hover, .cam-btn.active { color: var(--text); background: white; border-color: #7d7d78; }
 #readoutStrip { position: absolute; bottom: 122px; left: 18px; right: 18px; min-height: 82px; padding: 8px 14px 12px; border-top: 1px solid #d4d4cd; border-bottom: 1px solid #d4d4cd; background: #f7f7f4; }
-#stage.demo #readoutStrip { border: 1px dashed #d4d4cd; }
+#stage.demo #readoutCaption span:last-child { text-decoration: underline dashed #aaa9a1; text-underline-offset: 3px; }
 #readoutCaption { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 10px; margin-bottom: 7px; }
 .reading-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
 #stage.demo .reading-dot { background: #777772; }
@@ -147,7 +147,10 @@ input[type="range"]::-moz-range-thumb { border-radius: 50%; background: var(--te
 #markerBar button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 0 11px; border: 1px solid var(--line-2); border-radius: 24px; background: white; font-size: 11px; font-weight: 500; white-space: nowrap; }
 #markerBar button:hover { background: var(--panel-2); border-color: #90908a; }
 #markerBar button i { font-style: normal; font-size: 18px; line-height: 1; }
-#markerBar button[data-marker="pain"] { background: var(--accent); border-color: var(--accent); color: #0b0b0c; }
+#markerBar button[data-marker="pain"] i { color: #c33710; }
+#markerBar button[data-marker="pain"].active { background: var(--accent); border-color: var(--accent); color: var(--text); }
+#markerBar button[data-marker="pain"].active i { color: var(--text); }
+#markerBar button[data-marker="pain"].active kbd { color: var(--text); background: white; border-color: #9c330f; }
 #markerBar button.active { animation: markerPress .6s var(--ease); background: var(--text); color: white; }
 #markerBar button.active kbd { color: inherit; }
 @keyframes markerPress { from { transform: translateY(-5px); } to { transform: none; } }
@@ -329,10 +332,10 @@ input[type="range"]::-moz-range-thumb { border-radius: 50%; background: var(--te
   .src { height: 35px; }
   #trackPill { position: static; grid-row: 3; grid-column: 1 / -1; justify-self: start; padding: 3px 9px; max-width: 100%; }
   #stage { height: 1115px; flex: none; }
-  #stage.demo { height: 760px; }
+  #stage.demo { height: calc(52vh + 450px); }
   #camInset { inset: 0 0 auto; height: 355px; }
   #three { inset: 360px 0 auto; height: 350px; border-top: 1px solid #dcdcd7; }
-  #stage.demo #three { inset: 48px 0 auto; height: 350px; border: 0; }
+  #stage.demo #three { inset: 48px 0 auto; height: 52vh; border: 0; }
   #stageHud { top: 17px; left: 16px; max-width: 60%; }
   #hudTitle { font-size: 12px; }
   #hudSub { font-size: 10px; }
@@ -342,7 +345,7 @@ input[type="range"]::-moz-range-thumb { border-radius: 50%; background: var(--te
   #stage.demo .cam-tools { top: 14px; left: 120px; }
   #demoLabel { top: 20px; right: 14px; padding: 0; border: 0; font-size: 9px; max-width: 52%; }
   #leftPanel { max-height: 290px; width: 270px; }
-  #readoutStrip { bottom: 205px; left: 12px; right: 12px; min-height: 142px; padding: 8px 12px; }
+  #readoutStrip { bottom: 235px; left: 12px; right: 12px; min-height: 142px; padding: 8px 12px; }
   .readout-values { grid-template-columns: repeat(3, 1fr); row-gap: 8px; }
   .joint-readout { padding: 0 10px; }
   .joint-readout:nth-child(3) { border-right: 0; }
@@ -352,7 +355,7 @@ input[type="range"]::-moz-range-thumb { border-radius: 50%; background: var(--te
   #markerBar { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; width: 100%; }
   #markerBar button { min-height: 44px; font-size: 12px; justify-content: flex-start; padding: 0 12px; }
   #markerBar kbd { margin-left: auto; }
-  #arcWrap { height: 58px; width: 100%; flex: none; border-left: 0; border-top: 1px solid var(--line); padding: 4px 0 0; }
+  #arcWrap { height: 82px; width: 100%; flex: none; border-left: 0; border-top: 1px solid var(--line); padding: 4px 0 0; }
   #holdRing { top: 310px; left: calc(50% - 32px); }
   #chatPanel { height: 670px; flex: none; }
   .tab { min-height: 50px; }

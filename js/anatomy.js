@@ -130,13 +130,6 @@ function ringTexture() {
   return new THREE.CanvasTexture(c);
 }
 
-// A single warm tint indicates tissue load, without emissive diagnostic glows.
-const RAMP = [new THREE.Color(0xc9c9c3), new THREE.Color(0xff9f81), new THREE.Color(0xff4f1f)];
-function rampColor(t, out = new THREE.Color()) {
-  t = clamp(t, 0, 1);
-  return t < 0.5 ? out.copy(RAMP[0]).lerp(RAMP[1], t * 2) : out.copy(RAMP[1]).lerp(RAMP[2], (t - 0.5) * 2);
-}
-
 export const LAYERS = [
   { id: 'skin', label: 'Skin', color: '#cecec8', def: 0.04 },
   { id: 'muscles', label: 'Muscles', color: '#aaa9a1', def: 0.12 },
@@ -244,7 +237,10 @@ export function createAnatomy(container, { onHover } = {}) {
     for (const m of meshes) {
       // Each structure owns its material so tint/opacity never bleed between structures.
       if (m.material.userData.owner && m.material.userData.owner !== id) {
+        const baseColor = m.material.userData.baseColor;
         m.material = m.material.clone();
+        // Three.js serializes userData colors to hex numbers when cloning.
+        m.material.userData.baseColor = baseColor.clone();
         mats.push(m.material);
       }
       m.material.userData.owner = id;
@@ -494,7 +490,7 @@ export function createAnatomy(container, { onHover } = {}) {
   const glows = [];
   for (const [key, list] of Object.entries(GLOWS)) {
     for (const a of list) {
-      const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, depthTest: false, opacity: 0 }));
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xff4f1f, toneMapped: false, transparent: true, depthWrite: false, depthTest: false, opacity: 0 }));
       const ringS = new THREE.Sprite(new THREE.SpriteMaterial({ map: ringTex, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, depthTest: false, opacity: 0 }));
       glow.renderOrder = ringS.renderOrder = 10;
       root.add(glow, ringS);
@@ -709,7 +705,8 @@ export function createAnatomy(container, { onHover } = {}) {
         const mt = m.material;
         if (!mt.emissive) continue;
         mt.color.copy(mt.userData.baseColor);
-        if (heat > 0.05) mt.color.lerp(tmpC.setHex(0xff4f1f), heat * .8);
+        if (heat > 0.05) mt.color.lerp(tmpC.setHex(0xff4f1f), Math.min(1, heat * 1.2));
+        mt.opacity = Math.min(1, s.opacity * (1 + heat * .6));
         if (hov) mt.color.lerp(tmpC.setHex(0x777770), .25);
       }
     }
@@ -718,10 +715,9 @@ export function createAnatomy(container, { onHover } = {}) {
       g.v += (g.target - g.v) * 0.15;
       resolve(g.a, g.glow.position);
       g.ring.position.copy(g.glow.position);
-      const o = smoothstep(g.v, 0.15, 0.9);
-      g.glow.material.opacity = o * 0.08;
-      g.glow.material.color.copy(rampColor(g.v, tmpC));
-      g.glow.scale.setScalar(4 + 6 * g.v);
+      const o = smoothstep(g.v, 0.2, 0.7);
+      g.glow.material.opacity = o * 0.42;
+      g.glow.scale.setScalar(12 + 8 * g.v);
       const ph = (now * 0.9) % 1;
       g.ring.material.opacity = 0;
       g.ring.material.color.copy(g.glow.material.color);
@@ -773,10 +769,11 @@ export function createAnatomy(container, { onHover } = {}) {
   const fitTarget = V(0, -20, 0), corner = V(0, 0, 0), viewDirection = V(0, 0, 1);
   const inverseView = new THREE.Quaternion();
   function fitDemo() {
-    trunk.updateMatrixWorld(true);
+    scene.updateMatrixWorld(true);
     stageBounds.makeEmpty();
-    trunk.traverse((mesh) => {
-      if (mesh.isMesh && mesh.material?.userData?.layer === 'bone') stageBounds.expandByObject(mesh);
+    scene.traverse((mesh) => {
+      if (mesh.isMesh && mesh.material?.userData?.layer === 'bone'
+        && mesh.material.userData.owner !== 'forearm') stageBounds.expandByObject(mesh);
     });
     inverseView.copy(camera.quaternion).invert();
     viewBounds.makeEmpty();
@@ -786,7 +783,9 @@ export function createAnatomy(container, { onHover } = {}) {
           corner.set(x, y, z).sub(fitTarget).applyQuaternion(inverseView);
           viewBounds.expandByPoint(corner);
         }
-    const { distance } = fitAnatomyBounds(viewBounds, camera.aspect, camera.fov, [0, 0, 0]);
+    const { distance, target: center } = fitAnatomyBounds(viewBounds, camera.aspect, camera.fov);
+    corner.fromArray(center).applyQuaternion(camera.quaternion).add(fitTarget);
+    fitTarget.copy(corner);
     viewDirection.set(0, 0, 1).applyQuaternion(camera.quaternion);
     controls.target.copy(fitTarget);
     camera.position.copy(fitTarget).addScaledVector(viewDirection, distance);
