@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { armFromAngles, clamp, smoothstep } from './metrics.js';
+import { fitAnatomyBounds } from './framing.js';
 import {
   buildThorax, buildSkull, buildPelvis, buildClavicle, buildScapula, buildAcromion, buildCoracoid,
   buildHumerus, buildForearm, buildHandBones, buildHeadNeckTorsoSkin, buildHipSkin, buildUpperArmSkin, buildForearmSkin,
@@ -129,21 +130,21 @@ function ringTexture() {
   return new THREE.CanvasTexture(c);
 }
 
-// Stress colour ramp: calm teal -> amber -> hot red
-const RAMP = [new THREE.Color(0x2fd3c4), new THREE.Color(0xffb547), new THREE.Color(0xff4b4b)];
+// A single warm tint indicates tissue load, without emissive diagnostic glows.
+const RAMP = [new THREE.Color(0xc9c9c3), new THREE.Color(0xff9f81), new THREE.Color(0xff4f1f)];
 function rampColor(t, out = new THREE.Color()) {
   t = clamp(t, 0, 1);
   return t < 0.5 ? out.copy(RAMP[0]).lerp(RAMP[1], t * 2) : out.copy(RAMP[1]).lerp(RAMP[2], (t - 0.5) * 2);
 }
 
 export const LAYERS = [
-  { id: 'skin', label: 'Skin', color: '#e0ab8f', def: 0.14 },
-  { id: 'muscles', label: 'Muscles', color: '#d0505b', def: 0.92 },
-  { id: 'cuff', label: 'Rotator cuff', color: '#e0766b', def: 0.96 },
-  { id: 'tendons', label: 'Tendons', color: '#efe4cf', def: 1 },
-  { id: 'nerves', label: 'Nerves', color: '#f3cf55', def: 1 },
-  { id: 'bones', label: 'Skeleton', color: '#ece3cf', def: 1 },
-  { id: 'labrum', label: 'Labrum & bursa', color: '#6fd9ea', def: 0.9 },
+  { id: 'skin', label: 'Skin', color: '#cecec8', def: 0.04 },
+  { id: 'muscles', label: 'Muscles', color: '#aaa9a1', def: 0.12 },
+  { id: 'cuff', label: 'Rotator cuff', color: '#aaa9a1', def: 0.5 },
+  { id: 'tendons', label: 'Tendons', color: '#c6c6bf', def: 0.65 },
+  { id: 'nerves', label: 'Nerves', color: '#8f8b80', def: 0.35 },
+  { id: 'bones', label: 'Skeleton', color: '#d8d8d2', def: 1 },
+  { id: 'labrum', label: 'Labrum & bursa', color: '#b7b7af', def: 0.5 },
 ];
 
 // ---------- Fixed landmarks (scapula coords unless noted) ----------
@@ -157,30 +158,30 @@ export function createAnatomy(container, { onHover } = {}) {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.08;
-  renderer.setClearColor(0x000000, 0);
+  renderer.setClearColor(0xededeb, 0);
   container.appendChild(renderer.domElement);
   renderer.domElement.style.display = 'block';
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(30, 1, 1, 600);
-  const HOME = { pos: V(66, 0, 250), target: V(0, -34, 0) };
+  const camera = new THREE.PerspectiveCamera(36, 1, 1, 1200);
+  const HOME = { pos: V(10, -4, 290), target: V(0, -28, 0) };
   camera.position.copy(HOME.pos);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.copy(HOME.target);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
   controls.minDistance = 22;
-  controls.maxDistance = 300;
+  controls.maxDistance = 800;
   controls.update();
 
-  scene.add(new THREE.HemisphereLight(0xcfe3ff, 0x0b1220, 0.85));
-  const key = new THREE.DirectionalLight(0xfff1e0, 1.9); key.position.set(50, 60, 70); scene.add(key);
-  const rim = new THREE.DirectionalLight(0x58e6ff, 1.5); rim.position.set(-40, 25, -70); scene.add(rim);
-  const fill = new THREE.DirectionalLight(0x9db8ff, 0.45); fill.position.set(-50, -20, 40); scene.add(fill);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8e8e87, 1.1));
+  const key = new THREE.DirectionalLight(0xffffff, 1.8); key.position.set(50, 60, 70); scene.add(key);
+  const rim = new THREE.DirectionalLight(0xfafaf9, 0.7); rim.position.set(-40, 25, -70); scene.add(rim);
+  const fill = new THREE.DirectionalLight(0xffffff, 0.4); fill.position.set(-50, -20, 40); scene.add(fill);
 
   // Floor halo for grounding
   const halo = new THREE.Mesh(new THREE.CircleGeometry(46, 64), new THREE.MeshBasicMaterial({
-    map: glowTexture(), color: 0x2fd3c4, transparent: true, opacity: 0.08, depthWrite: false,
+    map: glowTexture(), color: 0x85857e, transparent: true, opacity: 0.04, depthWrite: false,
   }));
   halo.rotation.x = -Math.PI / 2; halo.position.set(0, -73, 0);
   scene.add(halo);
@@ -209,6 +210,10 @@ export function createAnatomy(container, { onHover } = {}) {
     } else {
       m = new THREE.MeshStandardMaterial({ color, roughness: kind === 'bone' ? 0.62 : 0.5, metalness: 0, ...extra });
     }
+    m.color.setHex(({ bone: 0xd8d8d2, muscle: 0xaaa9a1, tendon: 0xc6c6bf, nerve: 0x8f8b80, labrum: 0xb7b7af, skin: 0xcecec8 })[kind] ?? 0xb7b7af);
+    m.emissive.setHex(0x000000);
+    m.emissiveIntensity = 0;
+    m.userData.baseColor = m.color.clone();
     m.side = THREE.DoubleSide;
     m.userData.baseEmissive = m.emissive ? m.emissive.getHex() : 0;
     m.userData.baseIntensity = m.emissiveIntensity ?? 1;
@@ -546,12 +551,15 @@ export function createAnatomy(container, { onHover } = {}) {
   let side = 'R';
   let sideSign = 1;
   let tween = null;
+  let demoMode = false, activePreset = 'full';
   function flyTo(cam, dur = 0.8) {
+    if (demoMode) { tween = null; return; }
     const pos = cam.pos.clone(); pos.x *= sideSign;
     const target = cam.target.clone(); target.x *= sideSign;
     tween = { t: 0, dur, p0: camera.position.clone(), t0: controls.target.clone(), p1: pos, t1: target };
   }
   function applyPreset(name) {
+    activePreset = name;
     const p = PRESETS[name] || PRESETS.full;
     for (const l of LAYERS) layerVal[l.id] = p.layers[l.id] ?? l.def;
     focus = p.focus ? new Set(p.focus) : null;
@@ -700,10 +708,9 @@ export function createAnatomy(container, { onHover } = {}) {
       for (const m of s.meshes) {
         const mt = m.material;
         if (!mt.emissive) continue;
-        mt.emissive.setHex(mt.userData.baseEmissive);
-        if (heat > 0.05) mt.emissive.lerp(rampColor(heat, tmpC), clamp(heat * 1.2, 0, 1));
-        if (hov) mt.emissive.lerp(tmpC.setHex(0x9ff6ff), hov);
-        mt.emissiveIntensity = mt.userData.baseIntensity * (1 + heat * 0.8 + hov) * (s.hot > 0.6 ? 0.85 + 0.15 * Math.sin(now * 7) : 1);
+        mt.color.copy(mt.userData.baseColor);
+        if (heat > 0.05) mt.color.lerp(tmpC.setHex(0xff4f1f), heat * .8);
+        if (hov) mt.color.lerp(tmpC.setHex(0x777770), .25);
       }
     }
     for (const g of glows) {
@@ -712,11 +719,11 @@ export function createAnatomy(container, { onHover } = {}) {
       resolve(g.a, g.glow.position);
       g.ring.position.copy(g.glow.position);
       const o = smoothstep(g.v, 0.15, 0.9);
-      g.glow.material.opacity = o * 0.95;
+      g.glow.material.opacity = o * 0.08;
       g.glow.material.color.copy(rampColor(g.v, tmpC));
       g.glow.scale.setScalar(4 + 6 * g.v);
       const ph = (now * 0.9) % 1;
-      g.ring.material.opacity = g.v > 0.6 ? (1 - ph) * 0.8 * o : 0;
+      g.ring.material.opacity = 0;
       g.ring.material.color.copy(g.glow.material.color);
       g.ring.scale.setScalar((3 + 9 * ph) * (0.6 + g.v * 0.6));
     }
@@ -762,6 +769,29 @@ export function createAnatomy(container, { onHover } = {}) {
   ro.observe(container);
   resize();
   const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+  const stageBounds = new THREE.Box3(), viewBounds = new THREE.Box3();
+  const fitTarget = V(0, -20, 0), corner = V(0, 0, 0), viewDirection = V(0, 0, 1);
+  const inverseView = new THREE.Quaternion();
+  function fitDemo() {
+    trunk.updateMatrixWorld(true);
+    stageBounds.makeEmpty();
+    trunk.traverse((mesh) => {
+      if (mesh.isMesh && mesh.material?.userData?.layer === 'bone') stageBounds.expandByObject(mesh);
+    });
+    inverseView.copy(camera.quaternion).invert();
+    viewBounds.makeEmpty();
+    for (const x of [stageBounds.min.x, stageBounds.max.x])
+      for (const y of [stageBounds.min.y, stageBounds.max.y])
+        for (const z of [stageBounds.min.z, stageBounds.max.z]) {
+          corner.set(x, y, z).sub(fitTarget).applyQuaternion(inverseView);
+          viewBounds.expandByPoint(corner);
+        }
+    const { distance } = fitAnatomyBounds(viewBounds, camera.aspect, camera.fov, [0, 0, 0]);
+    viewDirection.set(0, 0, 1).applyQuaternion(camera.quaternion);
+    controls.target.copy(fitTarget);
+    camera.position.copy(fitTarget).addScaledVector(viewDirection, distance);
+    camera.lookAt(fitTarget);
+  }
   function frame(nowMs) {
     if (disposed) return;
     raf = requestAnimationFrame(frame);
@@ -790,6 +820,7 @@ export function createAnatomy(container, { onHover } = {}) {
       if (tween.t >= 1) tween = null;
     }
     controls.update();
+    if (demoMode) fitDemo();
     tint(nowMs / 1000);
     halo.material.opacity = 0.06 + 0.03 * Math.sin(nowMs / 1400);
     renderer.render(scene, camera);
@@ -798,6 +829,15 @@ export function createAnatomy(container, { onHover } = {}) {
   applyVisibility();
 
   return {
+    setDemoMode(on) {
+      demoMode = on;
+      if (on) {
+        tween = null;
+        controls.target.copy(fitTarget);
+        camera.position.set(0, -20, 300);
+        controls.update();
+      } else flyTo((PRESETS[activePreset] || PRESETS.full).cam);
+    },
     setPose(p = {}) {
       for (const k of ['elevation', 'plane', 'elbowFlex', 'hike']) if (Number.isFinite(p[k])) target[k] = p[k];
       if (Number.isFinite(p.rotation) && p.rotationValid !== false) target.rotation = p.rotation;

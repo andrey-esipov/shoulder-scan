@@ -208,6 +208,13 @@ function handleMetrics(m, t) {
 }
 
 function updatePanels(live) {
+  $('#stage').classList.add('has-motion');
+  for (const s of ['R', 'L']) {
+    $(`#read${s} strong`).textContent = live.sides[s] ? `${fmt(live.sides[s].elevation)}°` : '–';
+  }
+  $('#torsoReadout strong').textContent = live.torso ? `${fmt(live.torso.yaw)}°` : '–';
+  $('#rotationReadout strong').textContent = live.sides.R?.rotationValid ? `${fmt(live.sides.R.rotation)}°` : '–';
+  $('#rotationReadoutL strong').textContent = live.sides.L?.rotationValid ? `${fmt(live.sides.L.rotation)}°` : '–';
   const sm = live.sides[app.side];
   if (!sm) {
     $('#hudSub').textContent = `Can't see your ${SIDE_NAME[app.side].toLowerCase()} arm. Step back so your hips are in frame`;
@@ -243,9 +250,13 @@ pose.onStatus((text, kind) => {
   const pill = $('#trackPill');
   pill.classList.toggle('on', kind === 'tracking');
   pill.classList.toggle('warn', kind === 'lost' || kind === 'loading');
-  $('.txt', pill).textContent = text;
+  $('.txt', pill).textContent = kind === 'tracking' ? `MEASURED · ${text}` : text;
+  $('#camEmpty span').textContent = text;
 });
-pose.onLost(() => { if (run.active) $('#hudSub').textContent = 'Lost you. Step back into frame'; });
+pose.onLost(() => {
+  $('#stage').classList.remove('has-motion');
+  if (run.active) $('#hudSub').textContent = 'Lost you. Step back into frame';
+});
 
 /* ---------------- camera / video / demo ---------------- */
 let demoRaf = 0;
@@ -253,9 +264,11 @@ const setSource = (id) => ['btnCamera', 'btnDemo', 'btnUpload'].forEach((b) => $
 async function startCamera() {
   stopDemo();
   const btn = $('#btnCamera');
-  if (pose.running && app.source === 'camera') { pose.stop(); app.source = 'off'; btn.textContent = 'Camera'; btn.classList.remove('active'); $('#camEmpty').classList.remove('hide'); return; }
+  if (pose.running && app.source === 'camera') { pose.stop(); app.source = 'off'; btn.textContent = 'Camera'; btn.classList.remove('active'); $('#stage').classList.remove('has-motion'); $('#camEmpty').classList.remove('hide'); return; }
   setSource(null);
   btn.disabled = true; btn.textContent = 'Loading…';
+  $('#camEmpty span').textContent = 'Starting camera… Allow access when prompted';
+  $('#camEmpty').classList.remove('hide');
   try {
     await pose.init();
     await pose.startCamera();
@@ -266,6 +279,7 @@ async function startCamera() {
   } catch (e) {
     console.error(e);
     btn.textContent = 'Camera';
+    $('#camEmpty span').textContent = 'Camera unavailable. Try Demo or Video';
     toast(`Camera unavailable: ${e.message || e}. Try Demo or upload a video.`, 'warn');
   } finally { btn.disabled = false; }
 }
@@ -298,10 +312,12 @@ function startDemo() {
   app.source = 'demo';
   app.baseline = { L: 0.2, R: 0.2 };
   setSource('btnDemo');
-  $('#camEmpty span').textContent = 'Synthetic motion';
-  $('#camEmpty').classList.remove('hide');
+  $('#stage').classList.add('demo');
+  anatomy.setDemoMode(true);
+  $('#readoutCaption span:last-child').textContent = 'Simulated values';
+  $('#camEmpty').classList.add('hide');
   $('#btnCamera').textContent = 'Camera';
-  const pill = $('#trackPill'); pill.classList.add('on'); pill.classList.remove('warn'); $('.txt', pill).textContent = 'Demo';
+  const pill = $('#trackPill'); pill.classList.add('simulated'); pill.classList.remove('on', 'warn'); $('.txt', pill).textContent = 'DEMO · simulated motion';
   const total = DEMO.reduce((a, d) => a + d.dur, 0);
   const t0 = now();
   let lastName = '';
@@ -313,7 +329,7 @@ function startDemo() {
     const a = seg.f((c - acc) / seg.dur);
     if (seg.name !== lastName) { lastName = seg.name; if (!run.active) $('#stageHud .hud-kicker').textContent = `Demo · ${seg.name}`; }
     const mk = (x) => ({ elevation: x.elevation, plane: x.plane, rotation: x.rotation, elbowFlex: x.elbowFlex, rotationValid: true, rotationSource: x.elbowFlex > 35 ? 'forearm' : 'hand', visibility: 1, neckGap: 0.2 * (1 - x.hike / 100) });
-    const rest = { elevation: 12, plane: 0, rotation: 0, elbowFlex: 10, hike: 0 };
+    const rest = { ...a, elevation: Math.max(12, a.elevation - 14), rotation: a.rotation * .65, hike: a.hike * .5 };
     const yaw = 25 * Math.sin(t * 0.6);
     handleMetrics({ lean: 2 * Math.sin(t), torso: { yaw, hipYaw: yaw * 0.4, separation: yaw * 0.6, flex: 5, lean: 2 * Math.sin(t) }, sides: { [app.side]: mk(a), [other(app.side)]: mk(rest) } }, t);
     demoRaf = requestAnimationFrame(loop);
@@ -326,9 +342,13 @@ function stopDemo() {
   cancelAnimationFrame(demoRaf);
   app.source = 'off'; app.baseline = { L: null, R: null };
   setSource(null);
+  $('#stage').classList.remove('demo', 'has-motion');
+  anatomy.setDemoMode(false);
+  $('#readoutCaption span:last-child').textContent = 'Measured values';
+  $('#camEmpty').classList.remove('hide');
   $('#stageHud .hud-kicker').textContent = 'Live anatomy';
   $('#camEmpty span').textContent = 'Camera off';
-  const pill = $('#trackPill'); pill.classList.remove('on'); $('.txt', pill).textContent = 'Camera off';
+  const pill = $('#trackPill'); pill.classList.remove('on', 'simulated'); $('.txt', pill).textContent = 'Camera off';
 }
 
 /* ---------------- chat ---------------- */
@@ -770,6 +790,8 @@ function addMarker(type, src = 'you') {
   if (run.rec && run.active) run.rec.markers.push(m);
   else (exam.freeMarkers ||= []).push(m);
   arc.mark(type, app.live?.t ?? now());
+  $('#stage').classList.remove('marker-pulse');
+  requestAnimationFrame(() => $('#stage').classList.add('marker-pulse'));
   const btn = $(`#markerBar button[data-marker="${type}"]`);
   if (btn) { btn.classList.add('active'); setTimeout(() => btn.classList.remove('active'), 600); }
   toast(`${MARK_LABEL[type]}${sm ? ` at ${fmt(sm.elevation)}° ${planeLabel(sm.elevation, sm.plane)}` : ''}${src === 'mic' ? ' (heard by mic)' : ''}`, type === 'pain' || type === 'unstable' ? 'warn' : '');
@@ -778,6 +800,7 @@ $$('#markerBar button[data-marker]').forEach((b) => (b.onclick = () => addMarker
 document.addEventListener('keydown', (e) => {
   if (e.target.closest('input, textarea, select') || e.metaKey || e.ctrlKey || e.altKey) return;
   const k = e.key.toLowerCase();
+  if ($('.modal.show') && k !== 'escape') return;
   const map = { ' ': 'pain', p: 'pain', c: 'click', u: 'unstable', l: 'pull' };
   if (map[k]) { e.preventDefault(); addMarker(map[k]); }
   else if (k === 'n' || k === 'enter') runCommand('next');
@@ -803,10 +826,18 @@ $('#btnPopMic').onclick = async () => {
 /* ---------------- report ---------------- */
 function openReport(report = app.report) {
   if (!report) {
-    if (!Object.keys(exam.intake).length) { toast('Run the exam first to generate a report'); return; }
+    if (!Object.keys(exam.intake).length) {
+      $('#reportBody').innerHTML = '<div class="report"><h3>Your report starts with an exam</h3><p>Complete a guided screening to see your movement findings, the evidence for possible causes, and a personalized rehab plan.</p><p class="rp-muted">No findings yet. Demo motion is simulated, not a clinical measurement.</p><button class="btn primary" id="reportStartExam" type="button">Start quick exam</button><p class="rp-foot">Screening aid, not a diagnosis. Seek care promptly for sudden weakness, numbness, deformity after injury, or persistent night pain.</p></div>';
+      $('#reportMeta').textContent = 'No exam completed · Screening aid, not a diagnosis';
+      $('#btnPrint').disabled = true; $('#btnExport').disabled = true;
+      $('#reportModal').classList.add('show');
+      $('#reportStartExam').onclick = () => { $('#reportModal').classList.remove('show'); startExam('quick'); };
+      return;
+    }
     report = app.report = buildReport(exam);
   }
   renderReport($('#reportBody'), report);
+  $('#btnPrint').disabled = false; $('#btnExport').disabled = false;
   const d = new Date(report.generatedAt || Date.now());
   $('#reportMeta').textContent = `${SIDE_NAME[report.side] || ''} shoulder · ${d.toLocaleString()} · Screening aid, not a diagnosis`;
   $('#reportModal').classList.add('show');
@@ -825,6 +856,22 @@ $('#reportBody').addEventListener('click', (e) => {
   startCoach(ex.coach, b.dataset.ex);
 });
 for (const id of ['reportModal', 'historyModal']) $(`#${id}`).addEventListener('click', (e) => { if (e.target.id === id) e.target.classList.remove('show'); });
+for (const modal of $$('.modal')) {
+  let returnFocus = null;
+  new MutationObserver(() => {
+    if (modal.classList.contains('show')) {
+      returnFocus = document.activeElement;
+      modal.querySelector('button:not(:disabled)')?.focus();
+    } else returnFocus?.focus();
+  }).observe(modal, { attributes: true, attributeFilter: ['class'] });
+  modal.addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab') return;
+    const nodes = [...modal.querySelectorAll('button:not(:disabled), a[href], summary, input')].filter((n) => n.getClientRects().length);
+    const first = nodes[0], last = nodes.at(-1);
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+    if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+  });
+}
 
 /* ---------------- rehab ---------------- */
 const coach = { key: null, cfg: null, counter: null, holdStart: null, best: 0, lastWarn: 0, lastSpoken: 0 };
@@ -912,6 +959,8 @@ function coachTick(live) {
 function switchTab(tab) {
   $('#tabExam').classList.toggle('active', tab === 'exam');
   $('#tabRehab').classList.toggle('active', tab === 'rehab');
+  $('#tabExam').setAttribute('aria-selected', tab === 'exam');
+  $('#tabRehab').setAttribute('aria-selected', tab === 'rehab');
   if (tab === 'rehab' && !$('#rehabList').firstChild) renderRehab();
 }
 $('#tabExam').onclick = () => switchTab('exam');
@@ -959,6 +1008,8 @@ addEventListener('beforeunload', () => { pop?.stop(); pose.stop(); });
 /* ---------------- init ---------------- */
 buildLeftPanel();
 buildMeasure();
+$('#testCard').innerHTML = '<div class="tc-step">Guided shoulder screening</div><div class="tc-title">A clearer picture of your movement.</div><p class="tc-desc">Move gently. Mark what you feel. Start an exam when you’re ready.</p><div class="tc-progress"><i></i></div>';
+$('#testCard').classList.add('show');
 setSide('R');
 applyPreset('full');
 switchTab('exam');
@@ -973,5 +1024,8 @@ if (!voice.ttsSupported) $('#btnVoiceToggle').classList.add('off');
   const demo = el('button', 'opt', 'Explore the 3D demo'); demo.type = 'button'; demo.onclick = startDemo; box.append(demo);
   $('.bubble', chatLog.lastElementChild).append(box);
   scrollChat();
+  if (new URLSearchParams(location.search).get('exam') === 'quick') startExam('quick');
 })();
 window.__shoulder = { app, exam, run, anatomy, pose, handleMetrics, startDemo, openReport, buildReport };
+const params = new URLSearchParams(location.search);
+if (params.get('demo') === '1') startDemo();

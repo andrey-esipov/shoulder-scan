@@ -4,10 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Shoulder Scan</title>
-  <meta name="color-scheme" content="dark" />
+  <meta name="color-scheme" content="light" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Ccircle cx='9' cy='21' r='7' fill='%230b0b0c'/%3E%3Ccircle cx='22' cy='8' r='7' fill='%230b0b0c'/%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
   <script type="importmap">
   {
@@ -20,22 +21,28 @@
   <script type="module" src="js/main.js"></script>
 </head>
 <body>
+<!-- THESIS: The body is the interface. One wide soft-grey stage leads with the real CT skeleton. Live camera sits beside it; demo gives anatomy the stage. Values live in a separate strip, never over the body.
+OWN-WORLD: Neutral Instrument. Warm near-white ground, near-black ink, hairline borders, white surfaces. Rare #FF4F1F accent, light theme, clean grotesk, tabular measurements.
+STORY: Pick Camera/Demo/Video, see both shoulders and torso tracked with mirroring anatomy, mark symptoms, follow the guided exam, open Report and Rehab.
+FIRST VIEWPORT: Wide anatomy stage, separate measurement strip and marker/timeline dock, right-hand Exam/Rehab conversation, compact source header.
+FORM: B · Stage first. -->
 <div id="app">
   <!-- ============ HEADER ============ -->
   <header id="topbar">
     <div class="brand">
       <span class="brand-mark" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="9" cy="8.5" r="3.6"/><path d="M11.6 11.2 18 19"/><path d="M5.6 10.8C4.6 14 5.3 17 7 19.5"/></svg>
+        <svg viewBox="0 0 30 30" width="30" height="30" fill="currentColor"><circle cx="9" cy="21" r="7"/><circle cx="22" cy="8" r="7"/></svg>
       </span>
-      <span class="brand-name">Shoulder <em>Scan</em></span>
+      <span class="brand-name">Shoulder Scan</span>
     </div>
 
     <nav class="source" role="group" aria-label="Motion source">
       <button id="btnCamera" class="src" type="button" title="Track your arm with the webcam">Camera</button>
-      <button id="btnDemo" class="src" type="button" title="Synthetic arm motion, no camera needed">Demo</button>
+      <button id="btnDemo" class="src" type="button" title="Simulated anatomical motion, no camera needed">Demo</button>
       <button id="btnUpload" class="src" type="button" title="Analyze a recorded video (e.g. your serve)">Video</button>
       <input type="file" id="fileVideo" accept="video/*" hidden />
     </nav>
+    <div id="trackPill" class="pill" role="status" aria-live="polite"><span class="dot"></span><span class="txt">Camera off</span></div>
 
     <div class="top-actions">
       <button id="btnReport" class="btn ghost" type="button" title="Open your report">
@@ -51,8 +58,12 @@
     </div>
   </header>
 
-  <!-- ============ LEFT PANEL ============ -->
-  <aside id="leftPanel" class="panel">
+  <!-- ============ CENTER STAGE ============ -->
+  <main id="stage">
+    <div id="three" aria-label="Interactive CT-derived anatomy"></div>
+    <details id="anatomyControls">
+      <summary>Anatomy <span aria-hidden="true">⌄</span></summary>
+      <aside id="leftPanel">
     <section class="sec">
       <h3 class="sec-title">Anatomy</h3>
       <div id="sideToggle" class="seg-group" role="group" aria-label="Shoulder side"></div>
@@ -68,23 +79,18 @@
       </details>
     </section>
 
-    <section class="sec">
+    <details class="sec metrics-drawer">
+      <summary>Motion &amp; tissue load</summary>
       <h3 class="sec-title">Motion</h3>
       <div id="measure" class="meas"></div>
-    </section>
-
-    <section class="sec">
       <h3 class="sec-title">Tissue load</h3>
       <div id="loadMap" class="meas load"></div>
-    </section>
+    </details>
   </aside>
-
-  <!-- ============ CENTER STAGE ============ -->
-  <main id="stage">
-    <div id="three"></div>
+    </details>
 
     <div id="stageHud">
-      <div class="hud-kicker">Live anatomy</div>
+      <div class="hud-kicker" hidden></div>
       <div id="hudTitle">Right shoulder</div>
       <div id="hudSub">Choose Camera or Demo to drive the model</div>
     </div>
@@ -98,24 +104,33 @@
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="6" width="14" height="12" rx="3"/><path d="m16.5 10 5-3v10l-5-3"/></svg>
         <span>Camera off</span>
       </div>
-      <div id="trackPill" class="pill" role="status" aria-live="polite"><span class="dot"></span><span class="txt">Camera off</span></div>
-      <div class="cam-tools">
+    </div>
+    <div class="cam-tools">
         <button id="btnMirror" class="cam-btn" type="button" title="Mirror image" aria-label="Mirror image">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M8 7 3 12l5 5zM16 7l5 5-5 5z"/></svg>
         </button>
         <button id="btnCapture" class="cam-btn" type="button" title="Save snapshot" aria-label="Save snapshot">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="6.5" width="18" height="13.5" rx="3"/><circle cx="12" cy="13" r="3.3"/><path d="M9 6.5 10.5 4h3L15 6.5"/></svg>
         </button>
-      </div>
     </div>
+    <div id="demoLabel">No camera · simulated motion</div>
+    <section id="readoutStrip" aria-label="Motion readings">
+      <div id="readoutCaption"><span class="reading-dot" aria-hidden="true"></span><span>Measured values</span></div>
+      <div class="readout-values">
+        <div class="joint-readout" id="readR">R elev<strong>–</strong></div>
+        <div class="joint-readout" id="readL">L elev<strong>–</strong></div>
+        <div class="joint-readout" id="rotationReadout">R ER / IR<strong>–</strong></div>
+        <div class="joint-readout" id="rotationReadoutL">L ER / IR<strong>–</strong></div>
+        <div id="torsoReadout" class="joint-readout">Torso turn<strong>–</strong></div>
+      </div>
+    </section>
 
     <div id="dock">
       <div id="markerBar" role="toolbar" aria-label="Symptom markers">
-        <span class="mb-label">Mark when you feel it</span>
-        <button type="button" data-marker="pain"><i></i>Pain<kbd>Space</kbd></button>
-        <button type="button" data-marker="click"><i></i>Click<kbd>C</kbd></button>
-        <button type="button" data-marker="pull"><i></i>Pull<kbd>L</kbd></button>
-        <button type="button" data-marker="unstable"><i></i>Unstable<kbd>U</kbd></button>
+        <button type="button" data-marker="pain"><i aria-hidden="true">ϟ</i>Pain<kbd>P</kbd></button>
+        <button type="button" data-marker="click"><i aria-hidden="true">◖</i>Click<kbd>C</kbd></button>
+        <button type="button" data-marker="pull"><i aria-hidden="true">↗</i>Pull<kbd>L</kbd></button>
+        <button type="button" data-marker="unstable"><i aria-hidden="true">△</i>Unstable<kbd>U</kbd></button>
       </div>
       <div id="arcWrap"><canvas id="arcChart"></canvas></div>
     </div>
@@ -165,7 +180,6 @@
           <button id="btnPopMic" class="pop-toggle" type="button" title="Use the microphone to catch clicks and pops">
             <span class="pt-sw"></span>Click detector<span class="pop-meter"><i id="popLevel"></i></span>
           </button>
-          <span class="disclaimer">Screening aid, not a diagnosis · Bones: <a href="https://lifesciencedb.jp/bp3d/" target="_blank" rel="noopener" style="color:inherit">BodyParts3D</a> © DBCLS, CC BY-SA 2.1 JP</span>
         </div>
       </form>
     </div>
@@ -175,6 +189,7 @@
       <div id="rehabList"></div>
     </div>
   </aside>
+  <footer class="disclaimer">Screening aid, not a diagnosis · Bones: <a href="https://lifesciencedb.jp/bp3d/" target="_blank" rel="noopener">BodyParts3D</a> © DBCLS, CC BY-SA 2.1 JP</footer>
 </div>
 
 <!-- ============ MODALS ============ -->

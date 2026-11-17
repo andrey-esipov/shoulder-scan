@@ -5,8 +5,8 @@ const WASM = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm'
 const MODEL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task';
 const HAND_MODEL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
 const HAND_EDGES = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12], [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [0, 17], [17, 18], [18, 19], [19, 20]];
-const TEAL = '#2fd3c4';
-const VIOLET = '#a78bfa';
+const FOCUS_INK = '#fafaf9';
+const OTHER_INK = '#d1d1cb';
 const MIN_VIS = 0.4;
 const LOST_AFTER = 0.5;
 
@@ -124,9 +124,9 @@ function drawSkeleton(ctx, lms, map, s, side, hands) {
     ctx.arc(P[0], P[1], 2.5 * s, 0, Math.PI * 2);
     ctx.fill();
   }
-  // Both arms: the focus side in teal, the other in violet.
+  // Both arms stay neutral; the slightly heavier line identifies the focus side.
   for (const sd of side ? [side === 'L' ? 'R' : 'L', side] : []) {
-    const hi = SIDE_IDX[sd], primary = sd === side, C = primary ? TEAL : VIOLET;
+    const hi = SIDE_IDX[sd], primary = sd === side, C = primary ? FOCUS_INK : OTHER_INK;
     ctx.globalAlpha = primary ? 1 : 0.85;
     const S = pt(hi.sh), E = pt(hi.el), W = pt(hi.wr), H = pt(hi.hip);
     if (S && E && H) {
@@ -135,14 +135,14 @@ function drawSkeleton(ctx, lms, map, s, side, hands) {
       let d = a1 - a0;
       while (d > Math.PI) d -= 2 * Math.PI;
       while (d < -Math.PI) d += 2 * Math.PI;
-      ctx.strokeStyle = primary ? 'rgba(47,211,196,0.55)' : 'rgba(167,139,250,0.5)';
+      ctx.strokeStyle = primary ? 'rgba(255,255,255,0.8)' : 'rgba(209,209,203,0.7)';
       ctx.lineWidth = 2 * s;
       ctx.beginPath();
       ctx.arc(S[0], S[1], 26 * s, a0, a0 + d, d < 0);
       ctx.stroke();
     }
-    ctx.shadowColor = C;
-    ctx.shadowBlur = 14 * s;
+    ctx.shadowColor = '#0b0b0c';
+    ctx.shadowBlur = 2 * s;
     ctx.strokeStyle = C;
     ctx.lineWidth = (primary ? 6 : 4.5) * s;
     ctx.beginPath();
@@ -166,7 +166,7 @@ function drawSkeleton(ctx, lms, map, s, side, hands) {
       ctx.shadowBlur = 0;
       ctx.fillStyle = C;
       for (const P of H) { ctx.beginPath(); ctx.arc(P[0], P[1], 2.2 * s, 0, Math.PI * 2); ctx.fill(); }
-      ctx.shadowBlur = 14 * s;
+      ctx.shadowBlur = 2 * s;
     } else if (W && (Pk || Ix)) {
       ctx.shadowBlur = 6 * s;
       ctx.lineWidth = 2.5 * s;

@@ -1,10 +1,10 @@
 // Rolling strip chart of arm elevation + rotation with event markers.
 
-const MARK_COLORS = { pain: '#ff4b4b', click: '#ffb547', pull: '#b48cff', unstable: '#4bb8ff' };
-const ELEV = { color: '#2fd3c4', min: 0, max: 180, label: 'Elevation' };
-const ROT = { color: '#9a8cff', min: -90, max: 120, label: 'Rotation' };
-const GRID = [60, 90, 120, 150];
-const PAD = { l: 38, r: 74, t: 28, b: 12 };
+const MARK_COLORS = { pain: '#ff4f1f', click: '#665f52', pull: '#626970', unstable: '#343439' };
+const ELEV = { color: '#26262a', min: 0, max: 180, label: 'Elevation' };
+const ROT = { color: '#707078', min: -90, max: 120, label: 'Rotation' };
+const GRID = [90, 180];
+const PAD = { l: 30, r: 50, t: 22, b: 7 };
 
 export class ArcChart {
   constructor(canvas) {
@@ -112,16 +112,16 @@ export class ArcChart {
     ctx.lineWidth = 1;
     for (const g of GRID) {
       const y = Math.round(Y(g, ELEV)) + 0.5;
-      ctx.strokeStyle = g === 90 ? 'rgba(138,160,184,.20)' : 'rgba(138,160,184,.09)';
+      ctx.strokeStyle = '#e6e5e1';
       ctx.setLineDash(g === 90 ? [] : [3, 4]);
       ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke();
-      ctx.fillStyle = 'rgba(138,160,184,.6)';
+      ctx.fillStyle = '#5e5e63';
       ctx.textAlign = 'right';
       ctx.fillText(`${g}°`, x0 - 6, y);
     }
     ctx.setLineDash([]);
     // baseline
-    ctx.strokeStyle = 'rgba(138,160,184,.14)';
+    ctx.strokeStyle = '#d1d1cc';
     ctx.beginPath(); ctx.moveTo(x0, y1 + 0.5); ctx.lineTo(x1, y1 + 0.5); ctx.stroke();
 
     ctx.save();
@@ -131,14 +131,16 @@ export class ArcChart {
     for (const m of this.marks) {
       if (m.t < tStart) continue;
       const x = Math.round(X(m.t)) + 0.5;
-      const c = MARK_COLORS[m.type] || '#e6eef8';
+      const c = MARK_COLORS[m.type] || '#343439';
       const grad = ctx.createLinearGradient(0, y0, 0, y1);
       grad.addColorStop(0, c); grad.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.strokeStyle = grad; ctx.globalAlpha = 0.75; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y1); ctx.stroke();
       ctx.globalAlpha = 1;
-      ctx.fillStyle = c; ctx.shadowColor = c; ctx.shadowBlur = 8;
-      ctx.beginPath(); ctx.arc(x, y0 + 1, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = c;
+      const age = Math.max(0, now - m.t);
+      const drop = age < .5 ? 7 * (1 - age / .5) ** 3 : 0;
+      ctx.beginPath(); ctx.arc(x, y0 + 1 - drop, 3, 0, Math.PI * 2); ctx.fill();
       ctx.shadowBlur = 0;
     }
 
@@ -153,7 +155,7 @@ export class ArcChart {
     for (const s of [ELEV, ROT]) {
       ctx.fillStyle = s.color;
       ctx.fillRect(lx, 9, 12, 2.5);
-      ctx.fillStyle = 'rgba(230,238,248,.82)';
+      ctx.fillStyle = '#5e5e63';
       ctx.fillText(s.label, lx + 17, 10);
       lx += 17 + ctx.measureText(s.label).width + 16;
     }
@@ -161,22 +163,18 @@ export class ArcChart {
     // latest values at right
     const lastE = this._last('e'), lastR = this._last('r');
     ctx.textAlign = 'left';
-    ctx.font = '700 15px Inter, system-ui, sans-serif';
+    ctx.font = '600 11px Inter, system-ui, sans-serif';
     ctx.fillStyle = ELEV.color;
-    ctx.fillText(lastE == null ? '—' : `${Math.round(lastE)}°`, x1 + 12, y0 + ph * 0.3);
-    ctx.font = '700 13px Inter, system-ui, sans-serif';
+    ctx.fillText(lastE == null ? '—' : `${Math.round(lastE)}°`, x1 + 8, y0 + 4);
+    ctx.font = '600 11px Inter, system-ui, sans-serif';
     ctx.fillStyle = ROT.color;
-    ctx.fillText(lastR == null ? '—' : `${Math.round(lastR)}°`, x1 + 12, y0 + ph * 0.72);
-    ctx.font = '500 9px Inter, system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(138,160,184,.7)';
-    ctx.fillText('ELEV', x1 + 12, y0 + ph * 0.3 - 13);
-    ctx.fillText('ROT', x1 + 12, y0 + ph * 0.72 - 12);
+    ctx.fillText(lastR == null ? '—' : `${Math.round(lastR)}°`, x1 + 8, y1 - 2);
 
     if (!this.data.length && !this.marks.length) {
       ctx.textAlign = 'center';
       ctx.font = '500 11.5px Inter, system-ui, sans-serif';
-      ctx.fillStyle = 'rgba(138,160,184,.55)';
-      ctx.fillText('Arm motion will draw here once tracking starts', x0 + pw / 2, y0 + ph / 2);
+      ctx.fillStyle = '#5e5e63';
+      ctx.fillText('Waiting for motion', x0 + pw / 2, y0 + ph / 2);
     }
   }
 
@@ -201,7 +199,7 @@ export class ArcChart {
     for (const seg of segs) {
       if (fill && seg.length > 1) {
         const g = ctx.createLinearGradient(0, Y(s.max, s), 0, yBase);
-        g.addColorStop(0, 'rgba(47,211,196,.22)'); g.addColorStop(1, 'rgba(47,211,196,0)');
+        g.addColorStop(0, 'rgba(60,60,55,.10)'); g.addColorStop(1, 'rgba(60,60,55,0)');
         ctx.fillStyle = g;
         ctx.beginPath(); ctx.moveTo(seg[0][0], yBase);
         for (const [x, y] of seg) ctx.lineTo(x, y);
@@ -210,7 +208,7 @@ export class ArcChart {
       ctx.strokeStyle = s.color;
       ctx.lineWidth = fill ? 2 : 1.6;
       ctx.globalAlpha = fill ? 1 : 0.85;
-      ctx.shadowColor = s.color; ctx.shadowBlur = fill ? 6 : 0;
+      ctx.shadowBlur = 0;
       ctx.beginPath();
       seg.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
       if (seg.length === 1) ctx.arc(seg[0][0], seg[0][1], 1.5, 0, Math.PI * 2);
