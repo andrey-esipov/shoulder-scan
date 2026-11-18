@@ -916,7 +916,7 @@ function renderCard(t, i, n) {
   const questions = el('div'); questions.id = 'testQuestions'; body.append(questions);
   const goal = t.rep || t.target;
   c.append(body);
-  c.append(el('div', 'tc-live', `<span>${goal?.metric === 'rotation' ? 'Live rotation' : 'Live arm raise'}</span><strong>—°</strong><small>${goal ? `Target ${goal.up ?? goal.min ?? goal.max}° · ${SIDE_NAME[app.side]} shoulder` : 'Move gently within a comfortable range'}</small>`));
+  c.append(el('div', 'tc-live', `<span>${goal?.metric === 'rotation' ? 'Live rotation' : 'Live arm raise'}</span><strong class="waiting">—°</strong><small>${goal ? `Target ${goal.up ?? goal.min ?? goal.max}° · ${SIDE_NAME[app.side]} shoulder` : 'Move gently within a comfortable range'}</small>`));
   const progress = el('div', 'tc-progress');
   progress.setAttribute('role', 'progressbar');
   progress.setAttribute('aria-label', 'Movement toward target');
@@ -967,7 +967,10 @@ function examTick(live) {
   const metric = goal?.metric || 'elevation';
   const value = live.sides[app.side]?.[metric];
   const liveValue = $('.tc-live strong', $('#testCard')), reading = `${fmt(value)}°`;
-  if (liveValue && liveValue.textContent !== reading) liveValue.textContent = reading;
+  if (liveValue && liveValue.textContent !== reading) {
+    liveValue.textContent = reading;
+    liveValue.classList.toggle('waiting', !Number.isFinite(value));
+  }
   $('#movementTarget').hidden = !goal;
   if (goal) {
     const target = goal.up ?? goal.min ?? goal.max;
