@@ -115,7 +115,7 @@ export const TESTS = [
   {
     id: 'rot90', title: 'Rotation range', mode: 'reps', reps: 3, sides: 'affectedFirst', focus: 'labrum',
     say: 'This one matters for your serve. Raise the arm out to shoulder height with the elbow bent ninety degrees, like a goalpost. Rotate the hand back as far as is comfortable, then forward and down as far as it goes. Do the sore arm first, then the other one. Stop if it feels unstable.',
-    steps: ['Goalpost position: elbow at shoulder height, bent 90°', 'Rotate hand UP and back (external rotation)', 'Then rotate DOWN and forward (internal rotation)', 'Keep the shoulder blade still: no shrugging', '3 reps each arm. Sore arm first'],
+    steps: ['Goalpost position: elbow at shoulder height, bent 90°', 'Rotate hand up and back (external rotation)', 'Then rotate down and forward (internal rotation)', 'Keep the shoulder blade still: no shrugging', '3 reps each arm. Sore arm first'],
     tip: 'Turn 45° to the camera for a better read on rotation. GIRD means less inward rotation on one side compared with the other.',
     rep: { metric: 'rotation', up: 60, down: -10, elevRange: [65, 115] },
     follow: [{ id: 'cock', q: 'With the hand back (cocked position), what did you feel?', opts: [
@@ -129,13 +129,13 @@ export const TESTS = [
   {
     id: 'hawkins', title: 'Hawkins impingement test', mode: 'manual', sides: 'affected', focus: 'cuff',
     say: 'Raise the sore arm forward to shoulder height with the elbow bent ninety degrees. With your other hand, gently push the forearm down so the shoulder rotates inward. Hold two seconds. Press Next when finished.',
-    steps: ['Sore arm forward to shoulder height', 'Elbow bent 90°, forearm across in front', 'Other hand pushes the forearm DOWN (internal rotation)', 'Hold 2 seconds, then press Next'],
+    steps: ['Sore arm forward to shoulder height', 'Elbow bent 90°, forearm across in front', 'Other hand pushes the forearm down (internal rotation)', 'Hold 2 seconds'],
     follow: [{ id: 'pain', q: 'Did that reproduce your pain?', opts: PAIN_LOC, multi: true }],
   },
   {
     id: 'crossBody', title: 'Cross-body reach (AC joint & posterior capsule)', mode: 'manual', sides: 'affected', focus: 'bones',
     say: 'Reach the sore arm across your chest at shoulder height and gently pull the elbow toward the other shoulder with your free hand. Hold three seconds.',
-    steps: ['Sore arm across the chest at shoulder height', 'Free hand pulls the elbow across', 'Hold 3 seconds, then press Next'],
+    steps: ['Sore arm across the chest at shoulder height', 'Free hand pulls the elbow across', 'Hold 3 seconds'],
     follow: [{ id: 'feel', q: 'What did you feel?', multi: true, opts: [
       { v: 'none', label: 'Nothing', kw: ['nothing', 'no'] },
       { v: 'acPoint', label: 'Pain on the bony top point', kw: ['top', 'bony'] },
@@ -147,7 +147,7 @@ export const TESTS = [
   {
     id: 'obrien', title: "O'Brien active compression (labrum vs AC)", mode: 'manual', sides: 'affected', focus: 'labrum',
     say: "Stand next to a table or doorframe. Put the sore arm straight out in front at shoulder height, angled slightly across your body, thumb pointing down. Press up hard against the underside of the table for five seconds. Then turn the palm up and press again. Press Next when finished.",
-    steps: ['Arm straight, shoulder height, slightly across the midline', 'Thumb DOWN, press up against a table/doorframe for 5 s', 'Then palm UP, press again for 5 s', 'Press Next'],
+    steps: ['Arm straight, shoulder height, slightly across the midline', 'Thumb down, press up against a table/doorframe for 5 s', 'Then palm up, press again for 5 s'],
     follow: [
       { id: 'thumbDown', q: 'With your thumb down, did it hurt?', multi: true, opts: [
         { v: 'none', label: 'No pain', kw: ['no', 'none'] },
@@ -161,7 +161,7 @@ export const TESTS = [
   {
     id: 'speeds', title: "Speed's test (biceps tendon)", mode: 'hold', holdSec: 5, sides: 'affected', focus: 'biceps',
     say: 'Hold a water bottle in the sore hand, palm up, elbow straight, and lift it straight in front to shoulder height. Hold for five seconds.',
-    steps: ['Light weight (water bottle) in hand, palm UP', 'Elbow straight', 'Raise straight in front to shoulder height', 'Hold 5 s'],
+    steps: ['Light weight (water bottle) in hand, palm up', 'Elbow straight', 'Raise straight in front to shoulder height', 'Hold 5 s'],
     target: { metric: 'elevation', min: 65, max: 115, plane: [50, 130] },
     follow: [{ id: 'pain', q: 'Pain at the front of the shoulder or down the biceps?', opts: [
       { v: 'front', label: 'Yes, front of shoulder', kw: ['yes', 'front'] },
@@ -172,7 +172,7 @@ export const TESTS = [
   {
     id: 'emptyCan', title: 'Empty-can hold (supraspinatus)', mode: 'hold', holdSec: 6, sides: 'both', focus: 'cuff',
     say: 'Hold something light in each hand. Raise both arms to shoulder height about thirty degrees forward of your sides, thumbs pointing down like emptying a can. Hold six seconds. I will watch for drift and shaking.',
-    steps: ['Light weight in each hand', 'Arms 30° forward of the sides (scapular plane)', 'Thumbs DOWN, raise to shoulder height', 'Hold 6 s. I track drift and tremor'],
+    steps: ['Light weight in each hand', 'Arms 30° forward of the sides (scapular plane)', 'Thumbs down, raise to shoulder height', 'Hold 6 s. I track drift and tremor'],
     target: { metric: 'elevation', min: 70, max: 115, plane: [5, 70] },
     follow: [{ id: 'feel', q: 'How did the sore side feel?', multi: true, opts: [
       { v: 'none', label: 'Fine', kw: ['fine', 'no', 'nothing'] },

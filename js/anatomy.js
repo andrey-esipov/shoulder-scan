@@ -7,6 +7,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { armFromAngles, clamp, smoothstep } from './metrics.js';
 import { fitAnatomyBounds } from './framing.js';
+import { constrainForearmDirection } from './anatomy-pose.js';
 import {
   buildThorax, buildSkull, buildPelvis, buildClavicle, buildScapula, buildAcromion, buildCoracoid,
   buildHumerus, buildForearm, buildHandBones, buildHeadNeckTorsoSkin, buildHipSkin, buildUpperArmSkin, buildForearmSkin,
@@ -525,7 +526,8 @@ export function createAnatomy(container, { onHover } = {}) {
     for (const s of Object.values(STRUCT)) {
       let o = (layerVal[s.layer] ?? 1) * peelFactor(s.depth);
       if (focus && !focus.has(s.id) && SOFT.has(s.layer)) o *= 0.12;
-      if (s.id === 'trapUpper' && activePreset !== 'scapula') o = 0;
+      if (['trapUpper', 'rhomboids'].includes(s.id)) o = 0;
+      if (s.id === 'plexus' && activePreset !== 'nerves') o = 0;
       if (ghost[s.id] != null) o *= ghost[s.id];
       s.opacity = o;
       for (const m of s.meshes) {
@@ -535,6 +537,7 @@ export function createAnatomy(container, { onHover } = {}) {
         const tr = o < 0.995 || s.layer === 'skin';
         if (mt.transparent !== tr) { mt.transparent = tr; mt.needsUpdate = true; }
         mt.depthWrite = s.layer !== 'skin' && o > 0.6;
+        mt.depthTest = !(focus?.has(s.id) && SOFT.has(s.layer));
         m.renderOrder = s.layer === 'skin' ? 5 : tr ? 2 : 0;
         if (m.userData.prepass) m.userData.prepass.visible = m.visible;
       }
@@ -543,11 +546,11 @@ export function createAnatomy(container, { onHover } = {}) {
 
   // ---------- Presets & camera ----------
   const PRESETS = {
-    full: { layers: {}, cam: HOME },
-    muscles: { layers: { skin: 0.06, nerves: 0.2, bones: 0.75, labrum: 0.3 }, cam: HOME },
-    cuff: { layers: { skin: 0, muscles: 0.1, cuff: 1, tendons: 1, nerves: 0.15, labrum: 0.7 }, focus: ['supraspinatus', 'infraspinatus', 'teresMinor', 'subscapularis', 'bursa', 'bicepsLH'],
+    full: { layers: { muscles: 0, nerves: 0, tendons: 0, skin: 0, cuff: .15 }, cam: HOME },
+    muscles: { layers: { skin: 0, muscles: .35, nerves: 0, bones: 1, labrum: 0.3 }, cam: HOME },
+    cuff: { layers: { skin: 0, muscles: 0, cuff: 1, tendons: 0, nerves: 0, labrum: 0.15 }, focus: ['supraspinatus', 'infraspinatus', 'teresMinor', 'subscapularis', 'bursa'],
       cam: { pos: V(46, 24, 42), target: V(16, -3, -4) } },
-    labrum: { layers: { skin: 0, muscles: 0, cuff: 0.12, tendons: 1, nerves: 0, labrum: 1 }, focus: ['labrum', 'slap', 'bicepsLH', 'bursa'], ghost: { humerus: 0.14 },
+    labrum: { layers: { skin: 0, muscles: 0, cuff: 0, tendons: 0, nerves: 0, labrum: 1 }, focus: ['labrum', 'slap'],
       cam: { pos: V(54, 6, 20), target: V(17, -2, -5) } },
     bones: { layers: { skin: 0, muscles: 0, cuff: 0, tendons: 0.25, nerves: 0, labrum: 0.9 }, cam: HOME },
     biceps: { layers: { skin: 0, muscles: 0.9, cuff: 0.3, tendons: 1, nerves: 0, labrum: 0.8 }, focus: ['bicepsLH', 'bicepsSH', 'slap', 'subscapularis'],
@@ -615,24 +618,10 @@ export function createAnatomy(container, { onHover } = {}) {
     out.H.makeBasis(x, y, z).setPosition(headW);
     // Forearm
     const elbowW = ELBOW_H.clone().applyMatrix4(out.H);
-    // Keep the visual forearm in front of the ribcage; measured angles are untouched.
-    const intersectsChest = [0.25, 0.5, 0.75, 1].some(t => {
-      const p = elbowW.clone().addScaledVector(V(...f), 28 * t);
-      return Math.abs(p.x) < 18 && p.y < 8 && p.y > -48 && p.z < 12;
-    });
-    if (intersectsChest) {
-      const safe = V(f[0] * .35, f[1], Math.max(.65, Math.abs(f[2]))).normalize();
-      safe.toArray(f);
-    }
-    // Keep every point of the forearm/hand outside the skull during transitions.
-    const intersectsHead = [0.2, 0.4, 0.6, 0.8, 1, 1.25].some(t => {
-      const p = elbowW.clone().addScaledVector(V(...f), 28 * t);
-      return (p.x / 12) ** 2 + ((p.y - 20) / 16) ** 2 + (p.z / 13) ** 2 < 1;
-    });
-    if (intersectsHead) {
-      const safe = V(f[0], Math.min(0, f[1]), Math.max(.85, f[2])).normalize();
-      safe.toArray(f);
-    }
+    // Both endpoints share the trunk's rigid world transform, so collision tests
+    // in this torso frame are invariant under mirroring and torso movement.
+    const safeForearm = constrainForearmDirection(elbowW.toArray(), f);
+    f.splice(0, 3, ...safeForearm);
     const fy = V(-f[0], -f[1], -f[2]).normalize();
     const fx = x.clone().addScaledVector(fy, -x.dot(fy));
     if (fx.length() < 0.2) fx.copy(z).addScaledVector(fy, -z.dot(fy));
@@ -701,6 +690,18 @@ export function createAnatomy(container, { onHover } = {}) {
       const arr = new Float32Array(src.count * 3);
       for (let i = 0; i < src.count; i++) p.fromBufferAttribute(src, i).applyMatrix4(o.matrixWorld).toArray(arr, i * 3);
       const geo = new THREE.BufferGeometry();
+      if (o.name === 'hand') {
+        for (let i = 0; i < src.count; i++) {
+          const weight = clamp((-arr[i * 3 + 1] - 28) / 5, 0, 1) * .85;
+          arr[i * 3] = arr[i * 3] * (1 - weight) - weight;
+          arr[i * 3 + 2] *= 1 - weight;
+          const finger = Math.max(0, -arr[i * 3 + 1] - 33), curl = Math.min(1, finger / 10) * .65;
+          if (finger) {
+            arr[i * 3 + 1] = -33 - finger * Math.cos(curl);
+            arr[i * 3 + 2] += finger * Math.sin(curl);
+          }
+        }
+      }
       geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
       geo.setIndex(o.geometry.index.clone());
       geo.computeVertexNormals();
@@ -778,7 +779,8 @@ export function createAnatomy(container, { onHover } = {}) {
     ray.setFromCamera(ndc, camera);
     const cands = [];
     root.traverse((o) => { if (o.isMesh && o.visible && o.userData.struct && o.userData.struct.layer !== 'skin' && o.material.opacity > 0.25) cands.push(o); });
-    const hit = ray.intersectObjects(cands, false)[0];
+    const hits = ray.intersectObjects(cands, false);
+    const hit = hits.find(h => focus?.has(h.object.userData.struct.id)) || hits[0];
     const s = hit ? hit.object.userData.struct : null;
     hovered = s;
     renderer.domElement.style.cursor = s ? 'help' : '';
@@ -796,11 +798,16 @@ export function createAnatomy(container, { onHover } = {}) {
 
   // ---------- Loop ----------
   let raf = 0, last = performance.now(), disposed = false, viewHeight = 1;
+  let rendererWidth = 0, rendererHeight = 0, rendererReserve = -1;
   function resize() {
     const w = container.clientWidth || 1, h = container.clientHeight || 1;
     const reserve = Math.min(h - 1, parseFloat(getComputedStyle(container).getPropertyValue('--reserve')) || 0);
+    if (w === rendererWidth && h === rendererHeight && reserve === rendererReserve) return;
+    rendererWidth = w; rendererHeight = h; rendererReserve = reserve;
     viewHeight = h - reserve;
     renderer.setSize(w, h, false);
+    renderer.setScissorTest(false);
+    renderer.clear();
     renderer.setViewport(0, reserve, w, viewHeight);
     renderer.setScissor(0, reserve, w, viewHeight);
     renderer.setScissorTest(true);
@@ -808,9 +815,18 @@ export function createAnatomy(container, { onHover } = {}) {
     renderer.domElement.style.height = '100%';
     camera.aspect = w / viewHeight;
     camera.updateProjectionMatrix();
+    renderer.render(scene, camera);
   }
   const ro = new ResizeObserver(resize);
   ro.observe(container);
+  let stageClass = container.parentElement.className;
+  const stageObserver = new MutationObserver(() => {
+    const next = container.parentElement.className;
+    if (next === stageClass) return;
+    stageClass = next;
+    resize();
+  });
+  stageObserver.observe(container.parentElement, { attributes: true, attributeFilter: ['class'] });
   resize();
   const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
   const stageBounds = new THREE.Box3(), viewBounds = new THREE.Box3();
@@ -963,6 +979,8 @@ export function createAnatomy(container, { onHover } = {}) {
     },
     get side() { return side; },
     applyPreset,
+    setFocus(ids) { focus = new Set(ids); applyVisibility(); },
+    getPose() { return { ...cur, other: { ...otherC }, torso: { ...torsoC } }; },
     setPanelOpen(open) {
       panelOpen = open;
       if (regionView) flyTo(PRESETS[activePreset].cam);
@@ -978,6 +996,7 @@ export function createAnatomy(container, { onHover } = {}) {
         cur: { ...cur, _lastZ: cur._lastZ.clone() }, other: { ...otherC, _lastZ: otherC._lastZ.clone() }, torso: { ...torsoC }, stress: { ...stress },
         position: camera.position.clone(), target: controls.target.clone(), fit: fitTarget.clone(),
         layers: { ...layerVal }, focus, ghost, peel, activePreset, regionView, tween, sideSign,
+        halo: halo.visible, glows: glows.map(g => [g.glow.visible, g.ring.visible]),
       } : null;
       try {
         if (savedFrame) {
@@ -987,28 +1006,48 @@ export function createAnatomy(container, { onHover } = {}) {
           Object.assign(torsoC, torso || { yaw: 0, flex: 0, lean: 0 });
           root.scale.x = savedFrame.side === 'L' ? -1 : 1;
           applyPreset('full', { frame: false });
+          layerVal.bones = 1; layerVal.cuff = 1; ghost = {};
+          focus = new Set(['supraspinatus', 'infraspinatus', 'teresMinor']);
+          applyVisibility();
           Object.assign(stress, savedFrame.stress);
           trunk.rotation.set(torsoC.flex * DEG2RAD, -torsoC.yaw * DEG2RAD, -torsoC.lean * DEG2RAD, 'YXZ');
           solve(); solveOther();
           camera.position.set(0, -20, 300); controls.target.set(0, -20, 0); controls.update();
           fitDemo(true);
           tint(performance.now() / 1000);
-          for (const g of glows) {
-            resolve(g.a, g.glow.position);
-            g.glow.material.opacity = (stress[g.key] || 0) * .55;
-          }
+          halo.visible = false;
+          for (const g of glows) { g.glow.visible = false; g.ring.visible = false; }
+        }
+        if (crop && savedFrame) {
+          collectCorePoints();
+          const box = new THREE.Box3().setFromPoints(corePoints);
+          const w = 900, h = 1170, aspect = w / h;
+          const height = Math.max(box.max.y - box.min.y, (box.max.x - box.min.x) / aspect) / .94;
+          const center = box.getCenter(new THREE.Vector3());
+          const captureCamera = new THREE.OrthographicCamera(-height * aspect / 2, height * aspect / 2, height / 2, -height / 2, .1, 1000);
+          captureCamera.position.copy(center).add(V(0, 0, 300));
+          captureCamera.lookAt(center); captureCamera.updateProjectionMatrix();
+          const capture = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+          try {
+            capture.setSize(w, h); capture.setClearColor(0xffffff, 0);
+            capture.outputColorSpace = renderer.outputColorSpace;
+            capture.toneMapping = renderer.toneMapping;
+            capture.toneMappingExposure = renderer.toneMappingExposure;
+            capture.render(scene, captureCamera);
+            const image = document.createElement('canvas'); image.width = w; image.height = h;
+            const ctx = image.getContext('2d');
+            ctx.drawImage(capture.domElement, 0, 0);
+            ctx.globalCompositeOperation = 'destination-in';
+            const fade = ctx.createLinearGradient(0, 0, 0, h);
+            fade.addColorStop(0, '#fff'); fade.addColorStop(.83, '#fff'); fade.addColorStop(1, '#fff0');
+            ctx.fillStyle = fade; ctx.fillRect(0, 0, w, h);
+            return image.toDataURL('image/webp', .94);
+          } finally { capture.dispose(); capture.forceContextLoss(); }
         }
         renderer.render(scene, camera);
         const source = renderer.domElement;
         if (!crop) return source.toDataURL('image/png');
         collectCorePoints();
-        if (savedFrame) {
-          // The report shows a shoulder detail, not another full-body stage.
-          for (const point of corePoints) {
-            point.x = clamp(point.x, -42, 42);
-            point.y = clamp(point.y, -30, 38);
-          }
-        }
         const bounds = projectedCore(), ratio = source.width / container.clientWidth;
         const height = Math.round(viewHeight * ratio), margin = 12 * ratio;
         const x = Math.max(0, Math.floor((bounds.min.x + 1) * source.width / 2 - margin));
@@ -1025,6 +1064,8 @@ export function createAnatomy(container, { onHover } = {}) {
           Object.assign(stress, saved.stress); Object.assign(layerVal, saved.layers);
           ({ focus, ghost, peel, activePreset, regionView, tween } = saved);
           root.scale.x = saved.sideSign;
+          halo.visible = saved.halo;
+          glows.forEach((g, i) => { [g.glow.visible, g.ring.visible] = saved.glows[i]; });
           camera.position.copy(saved.position); controls.target.copy(saved.target); fitTarget.copy(saved.fit);
           trunk.rotation.set(torsoC.flex * DEG2RAD, -torsoC.yaw * DEG2RAD, -torsoC.lean * DEG2RAD, 'YXZ');
           solve(); solveOther(); applyVisibility(); tint(performance.now() / 1000);
@@ -1038,6 +1079,7 @@ export function createAnatomy(container, { onHover } = {}) {
       disposed = true;
       cancelAnimationFrame(raf);
       ro.disconnect();
+      stageObserver.disconnect();
       renderer.domElement.removeEventListener('pointermove', onMove);
       renderer.domElement.removeEventListener('pointerleave', onLeave);
       controls.dispose();

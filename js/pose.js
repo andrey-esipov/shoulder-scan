@@ -1,5 +1,6 @@
 import { FilesetResolver, PoseLandmarker, HandLandmarker } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/vision_bundle.mjs';
 import { SIDE_IDX, LandmarkSmoother } from './metrics.js';
+import { cameraErrorMessage as cameraError } from './experience.js';
 
 const WASM = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm';
 const MODEL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task';
@@ -65,15 +66,6 @@ async function loadLandmarker() {
     console.warn('[pose] GPU delegate failed, falling back to CPU', e);
     return make('CPU');
   }
-}
-
-function cameraError(e) {
-  const n = e?.name || '';
-  if (n === 'NotAllowedError' || n === 'SecurityError') return 'Camera permission was denied. Allow camera access in your browser settings and try again.';
-  if (n === 'NotFoundError' || n === 'OverconstrainedError') return 'No camera was found. Connect a webcam or load a video file instead.';
-  if (n === 'NotReadableError' || n === 'AbortError') return 'The camera is in use by another application. Close it and try again.';
-  if (n === 'TimeoutError') return 'The camera did not respond. Answer the browser permission prompt, check System Settings → Privacy & Security → Camera for your browser, and close apps using the camera (Teams, Zoom).';
-  return `Could not start the camera: ${e?.message || e}`;
 }
 
 export function createPoseTracker({ video, overlay }) {

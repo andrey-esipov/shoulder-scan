@@ -91,7 +91,7 @@ function reportHero(report) {
     ? `<img class="rp-anatomy-image" src="${esc(report.anatomySnapshot)}" alt="3D anatomy captured from this screening session">`
     : '<div class="rp-anatomy-empty">No anatomy snapshot saved for this session.</div>';
   const completion = report.completion;
-  const imageLabel = report.anatomyCapture?.kind === 'peak-load' ? 'Peak-load shoulder detail' : 'Session anatomy';
+  const imageLabel = report.anatomyCapture?.kind === 'forward-raise-peak' ? 'Forward raise · peak elevation' : 'Session anatomy';
   return `<section class="rp-hero">
     <div class="rp-brand"><svg viewBox="0 0 32 32" width="23" height="23" aria-hidden="true"><circle cx="9" cy="23" r="7"/><circle cx="23" cy="9" r="7"/></svg><span>Shoulder Scan</span><time>${esc(new Date(report.generatedAt || Date.now()).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }))}</time></div>
     <h3 class="rp-hero-title">${esc(title)}</h3>
@@ -165,7 +165,7 @@ export function renderReport(container, report) {
 
   const drivers = (flags.length ? [] : arr(report.drivers)).slice().sort((a, b) => (b.p || 0) - (a.p || 0));
   if (drivers.length) {
-    out.push(section('Likely drivers', `<p class="rp-muted" style="margin:0 0 8px">Not diagnoses — the reasons the tissue got overloaded.</p><div class="rp-conds">${drivers.map((d) => condCard(d, { driver: true })).join('')}</div>`, { open: false, count: drivers.length }));
+    out.push(section('Likely drivers', `<p class="rp-muted" style="margin:0 0 8px">Not diagnoses — the reasons the tissue got overloaded. GIRD / IR deficit means less inward rotation on the sore side than the other side.</p><div class="rp-conds">${drivers.map((d) => condCard(d, { driver: true })).join('')}</div>`, { open: false, count: drivers.length }));
   }
 
   const markers = arr(report.markers).slice().sort((a, b) => (a.elapsed || 0) - (b.elapsed || 0));

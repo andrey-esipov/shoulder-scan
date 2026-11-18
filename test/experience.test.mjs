@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { TESTS } from '../js/protocol.js';
-import { RepCounter } from '../js/rehab.js';
-import { demoTestPose, displayReport, formatValue, phaseTitle, intakePlan, cameraErrorMessage, collectMarkers, reportHeadline, reconcilePain, reportMotion, painArcEvidence } from '../js/experience.js';
+import { RepCounter, coachTarget } from '../js/rehab.js';
+import { constrainForearmDirection, insideBody } from '../js/anatomy-pose.js';
+import { demoTestPose, displayReport, formatValue, phaseTitle, intakePlan, cameraErrorMessage, collectMarkers, reportHeadline, reconcilePain, reportMotion, painArcEvidence, localDate } from '../js/experience.js';
 import { renderReport, reportToText } from '../js/report.js';
 import { armFromAngles } from '../js/metrics.js';
 
@@ -26,10 +27,22 @@ assert.ok(demoTestPose(TESTS.find(t => t.id === 'obrien'), 0));
 for (const time of [0, 1, 2, 4]) {
   const hawkins = demoTestPose(TESTS.find(t => t.id === 'hawkins'), time);
   const obrien = demoTestPose(TESTS.find(t => t.id === 'obrien'), time);
-  const hawkinsArm = armFromAngles(hawkins.elevation, hawkins.plane, hawkins.rotation, hawkins.elbowFlex);
+  const hawkinsArm = armFromAngles(hawkins.elevation, hawkins.plane, hawkins.humeralRotation, hawkins.elbowFlex);
   const obrienArm = armFromAngles(obrien.elevation, obrien.plane, obrien.rotation, obrien.elbowFlex);
   assert.ok(hawkinsArm.u[2] > .99 && hawkinsArm.f[1] <= .001, 'Hawkins stays forward with the forearm across/down, not into the skull');
   assert.ok(obrienArm.u[0] < 0 && obrienArm.u[2] > .95 && obrien.elbowFlex < 5, 'O’Brien reaches slightly across the body with a straight elbow');
+}
+const erTarget = coachTarget('standingER');
+assert.equal(erTarget.elevation, 0);
+assert.equal(erTarget.elbowFlex, 90);
+assert.equal(erTarget.rotation, 40);
+const originalTZ = process.env.TZ;
+process.env.TZ = 'America/Los_Angeles';
+assert.equal(localDate(new Date('2026-01-02T00:30:00Z')), '2026-01-01', 'export date follows the local day, not UTC');
+if (originalTZ === undefined) delete process.env.TZ; else process.env.TZ = originalTZ;
+for (const [elbow, direction] of [[[2, 0, 20], [0, 1, -.4]], [[20, -20, 0], [-1, 0, 0]]]) {
+  const safe = constrainForearmDirection(elbow, direction);
+  for (let d = 6; d <= 46; d += 2) assert.equal(insideBody(elbow.map((v, i) => v + safe[i] * d)), false, 'hand/forearm remains outside head and ribs');
 }
 assert.notEqual(demoTestPose(TESTS.find(t => t.id === 'flex'), 1).plane, demoTestPose(TESTS.find(t => t.id === 'abd'), 1).plane);
 assert.equal(demoTestPose(TESTS.find(t => t.id === 'palpate'), 0), null);
@@ -65,7 +78,9 @@ assert.match(cameraErrorMessage({ name: 'NotReadableError' }), /Teams or Zoom/);
 report.markers = collectMarkers({ startedT: 10, tests: { abd: { markers: [{ type: 'pain', side: 'R', elevation: 85, t: 15 }] } } });
 assert.equal(report.markers[0].elapsed, 5);
 assert.match(report.markers[0].test, /Side raise/);
-assert.equal(reportHeadline(inconclusive), inconclusive.summary.split('. ')[0]);
+assert.equal(reportHeadline(inconclusive), 'No strong screening pattern');
+assert.equal(reportHeadline({ flags: [{ level: 'emergency', text: 'Chest pain or shortness of breath.' }] }), 'Chest pain / shortness of breath');
+assert.equal(reportHeadline({ conditions: [{ name: 'Cuff finding', p: .8 }], summary: 'The leading finding is cuff.' }), 'Cuff finding');
 renderReport(container, report);
 assert.match(container.innerHTML, /Your markers/);
 assert.match(container.innerHTML, /85°/);

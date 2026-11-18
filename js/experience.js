@@ -26,6 +26,7 @@ export function cameraErrorMessage(error) {
   if (['NotAllowedError', 'SecurityError'].includes(name)) return 'Camera permission is blocked. Allow camera access in your browser settings, then try again.';
   if (['NotFoundError', 'OverconstrainedError'].includes(name)) return 'No camera was found. Connect a camera, then try again, or use Demo.';
   if (['NotReadableError', 'AbortError'].includes(name)) return "Couldn't start the camera. It may be in use by Teams or Zoom.";
+  if (name === 'TimeoutError') return 'The camera did not respond. Check the browser permission prompt and close other apps using your camera, then try again.';
   return error?.message || "Couldn't start the camera. Check its connection and browser permissions, or use Demo.";
 }
 export function collectMarkers(exam) {
@@ -36,8 +37,13 @@ export function collectMarkers(exam) {
   return records.map(m => ({ ...m, elapsed: m.elapsed ?? Math.max(0, m.t - (exam.startedT || 0)) })).sort((a, b) => a.elapsed - b.elapsed);
 }
 export function reportHeadline(report) {
-  return String(report?.summary || 'Shoulder screening').replace(/\*\*/g, '').split('. ')[0].replace(/\.$/, '');
+  const flag = report?.flags?.[0];
+  if (flag && /chest pain|shortness of breath/i.test(flag.text)) return 'Chest pain / shortness of breath';
+  if (flag) return String(flag.text || 'Safety concern').split('. ')[0].replace(/\.$/, '');
+  const lead = report?.conditions?.slice().sort((a, b) => b.p - a.p)[0];
+  return lead?.p >= .35 ? lead.name : report?.nerveReferral ? 'Neck / nerve referral' : 'No strong screening pattern';
 }
+export const localDate = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 export const formatValue = (value, digits = 0) => {
   if (value == null || !Number.isFinite(Number(value))) return '—';
   const rounded = Number(value).toFixed(digits);
@@ -86,8 +92,9 @@ export function demoTestPose(test, elapsed) {
   if (test.mode === 'manual') {
     const wave = (1 - Math.cos(elapsed * Math.PI / 2)) / 2;
     const clips = {
-      hawkins: { elevation: 90, plane: 90, rotation: -90 - 50 * wave, elbowFlex: 90, hike: 0 },
-      obrien: { elevation: 90, plane: 103, rotation: elapsed % 10 < 5 ? -80 : 80, elbowFlex: 3, hike: 0 },
+      // Hawkins starts across the body; its forearm turn is relative to that start.
+      hawkins: { elevation: 90, plane: 90, rotation: -60 - 10 * wave, humeralRotation: -100 - 10 * wave, elbowFlex: 90, hike: 0 },
+      obrien: { elevation: 90, plane: 103, rotation: elapsed % 10 < 5 ? -90 : 90, elbowFlex: 0, hike: 0 },
       crossBody: { elevation: 90, plane: 105 + 15 * wave, rotation: 0, elbowFlex: 30, hike: 0 },
       scapClick: { elevation: elapsed < 5 ? 12 : 12 + 158 * wave, plane: 30, rotation: 15, elbowFlex: 8, hike: elapsed < 5 ? 12 * wave : 2 },
     };

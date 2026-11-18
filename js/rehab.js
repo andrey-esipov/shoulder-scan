@@ -30,6 +30,15 @@ export const COACH = {
   standingER: { name: 'External rotation at side', metric: 'rotation', down: 5, up: 40, elevMax: 35, cue: 'Elbow glued to your side, rotate out.' },
   latHold: { name: 'Overhead lat-stretch hold', metric: 'elevation', hold: 30, holdMin: 150, cue: 'Arms overhead, ribs down. Breathe and hold.' },
 };
+export function coachTarget(key) {
+  const cfg = COACH[key];
+  return {
+    elevation: cfg.elevMax != null ? 0 : cfg.holdMin || (cfg.elevRange ? 90 : cfg.up),
+    plane: key === 'latHold' ? 45 : cfg.metric === 'rotation' ? 0 : 30,
+    rotation: cfg.metric === 'rotation' ? cfg.up : 0,
+    elbowFlex: cfg.metric === 'rotation' ? 90 : 6, hike: 0,
+  };
+}
 
 /** Rep counter with hysteresis; returns events. */
 export class RepCounter {
