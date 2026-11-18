@@ -20,6 +20,12 @@ const cuff = { intake: { side: 'R', dominant: 'R', age: '40-54', onset: 'gradual
   tests: { abd: { follow: { arc: 'middle' }, markers: [{ type: 'pain', elevation: 85 }] }, hawkins: { follow: { pain: ['lateral'] } }, emptyCan: { follow: { feel: ['pain'] } } } };
 const pC = show('Classic cuff', cuff);
 assert.ok(pC.saps > 0.8);
+const conflicted = structuredClone(cuff);
+conflicted.tests.abd.follow.arc = 'top';
+conflicted.tests.abd.markers = [{ type: 'pain', side: 'R', elevation: 69 }, { type: 'pain', side: 'R', elevation: 111 }];
+const reconciled = scoreConditions(conflicted);
+assert.equal(reconciled.f.painfulArc, true);
+assert.equal(reconciled.f.highArc, false, 'the answer must not add contradictory AC evidence after weighting midrange markers');
 
 // Snapping scapula
 const snap = { intake: { side: 'R', dominant: 'R', age: 'u25', onset: 'gradual', location: ['blade'], servePhase: ['none'], clickWhere: ['blade'], clickPainful: 'painless', redFlags: ['none'] }, tests: { scapClick: { follow: { where: ['blade'] } } } };

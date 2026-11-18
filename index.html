@@ -190,6 +190,7 @@ FORM: B · Stage first. -->
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
           </button>
         </div>
+        <div id="micStatus" role="status"></div>
         <div class="composer-sub">
           <button id="btnPopMic" class="pop-toggle" type="button" title="Use the microphone to catch clicks and pops" aria-pressed="false">
             <span class="pt-sw"></span><span>Click detector<small>Uses your mic to mark audible pops.</small></span><span class="pop-meter"><i id="popLevel"></i></span>
@@ -234,7 +235,7 @@ FORM: B · Stage first. -->
     <div class="modal-head">
       <div>
         <div class="modal-kicker">Saved in this browser</div>
-        <h2 id="historyTitle">Past sessions</h2>
+        <h2 id="historyTitle" tabindex="-1">Past sessions</h2>
       </div>
       <div class="modal-actions">
         <button id="btnCloseHistory" class="btn icon sm ghost" type="button" aria-label="Close history">

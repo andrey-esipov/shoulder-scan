@@ -8,7 +8,7 @@ const symptoms = { id: 'symptoms', q: 'What brings you here? Pick any that apply
   { v: 'weak', label: 'Weakness' }, { v: 'unsure', label: 'Not sure' },
 ] };
 const sport = { id: 'overheadSport', q: 'Do you play an overhead sport?', opts: yesNo };
-const pullDetail = { id: 'pullDetail', q: 'Does the pulling feel like your lat (side of your back / armpit), or deep inside the joint near the labrum?', opts: [
+const pullDetail = { id: 'pullDetail', q: 'Does the pulling feel like your lat (side of your back / armpit), or deep in the front/top of the joint?', opts: [
   { v: 'lat', label: 'Lat: side of back / armpit' }, { v: 'labrum', label: 'Labrum: deep inside the joint' }, { v: 'unsure', label: 'Not sure' },
 ] };
 export function intakePlan(mode) {
@@ -33,7 +33,7 @@ export function collectMarkers(exam) {
   for (const [id, test] of Object.entries(exam.tests || {})) {
     records.push(...(test.markers || []).map(m => ({ ...m, test: TESTS.find(t => t.id === id)?.title || id })));
   }
-  return records.map(m => ({ ...m, elapsed: Math.max(0, m.t - (exam.startedT || 0)) })).sort((a, b) => a.t - b.t);
+  return records.map(m => ({ ...m, elapsed: m.elapsed ?? Math.max(0, m.t - (exam.startedT || 0)) })).sort((a, b) => a.elapsed - b.elapsed);
 }
 export function reportHeadline(report) {
   return String(report?.summary || 'Shoulder screening').replace(/\*\*/g, '').split('. ')[0].replace(/\.$/, '');
@@ -56,6 +56,18 @@ export function reportMotion(exam) {
   return { forward: range('flex'), side: range('abd') };
 }
 
+export function painArcEvidence(record = {}, side = 'R') {
+  const answer = record.follow?.arc;
+  const angles = (record.markers || []).filter(m => m.type === 'pain' && (!m.side || m.side === side))
+    .map(m => m.elevation).filter(Number.isFinite).sort((a, b) => a - b);
+  const arc = !angles.length ? answer : angles.every(a => a >= 145) ? 'top'
+    : angles.every(a => a >= 55 && a <= 135) ? 'middle' : 'whole';
+  const labels = { top: 'near the top', middle: 'in the middle', whole: 'throughout the movement', none: 'no pain' };
+  const range = angles.length ? `${Math.round(angles[0])}${angles.at(-1) !== angles[0] ? `–${Math.round(angles.at(-1))}` : ''}°` : '';
+  return { arc, angles, explanation: angles.length && answer && answer !== arc
+    ? `You said ${labels[answer] || answer}; your markers were at ${range}. We weighted the markers.` : '' };
+}
+
 export function reconcilePain(record, field, painful, question = {}) {
   if (!painful) record.markers = record.markers.filter(m => m.type !== 'pain');
   else if (field === 'arc') {
@@ -74,8 +86,8 @@ export function demoTestPose(test, elapsed) {
   if (test.mode === 'manual') {
     const wave = (1 - Math.cos(elapsed * Math.PI / 2)) / 2;
     const clips = {
-      hawkins: { elevation: 90, plane: 90, rotation: -40 * wave, elbowFlex: 90, hike: 0 },
-      obrien: { elevation: 90, plane: 105, rotation: elapsed % 10 < 5 ? -35 : 35, elbowFlex: 8, hike: 0 },
+      hawkins: { elevation: 90, plane: 90, rotation: -90 - 50 * wave, elbowFlex: 90, hike: 0 },
+      obrien: { elevation: 90, plane: 103, rotation: elapsed % 10 < 5 ? -80 : 80, elbowFlex: 3, hike: 0 },
       crossBody: { elevation: 90, plane: 105 + 15 * wave, rotation: 0, elbowFlex: 30, hike: 0 },
       scapClick: { elevation: elapsed < 5 ? 12 : 12 + 158 * wave, plane: 30, rotation: 15, elbowFlex: 8, hike: elapsed < 5 ? 12 * wave : 2 },
     };
@@ -105,7 +117,7 @@ export function displayReport(report, completion) {
   const lead = report.conditions?.[0];
   return {
     ...report, completion,
-    summary: report.flags?.some(f => f.level === 'emergency') ? 'Call emergency services now. Do not continue movement testing.'
-      : `${report.nerveReferral ? 'Ask a clinician about your neck / nerves. Arrange an assessment for numbness, tingling or pain past the elbow. ' : ''}${report.stoppedForSafety ? 'Exam stopped. Please contact a clinician before testing.' : report.flags?.length ? 'Get checked before testing. A safety concern needs clinical assessment.' : `${lead?.p >= .35 ? `The leading screening finding is **${lead.name}**.` : 'No strong screening pattern was found.'} ${completion.completed < completion.total ? 'Finish the remaining tests before drawing conclusions. ' : ''}The findings below show the supporting and conflicting evidence. A clinician can assess the cause and help choose a safe, gradual return to activity.`}`,
+    summary: report.flags?.some(f => f.level === 'emergency') ? 'Do not continue movement testing. Exercises are paused until a clinician clears you.'
+      : `${report.stoppedForSafety ? 'Exam stopped. Please contact a clinician before testing.' : report.flags?.length ? 'Get checked before testing. A safety concern needs clinical assessment.' : `${lead?.p >= .35 ? `The leading screening finding is **${lead.name}**.` : 'No strong screening pattern was found.'} ${completion.completed < completion.total ? 'Finish the remaining tests before drawing conclusions. ' : ''}The findings below show the supporting and conflicting evidence. A clinician can assess the cause and help choose a safe, gradual return to activity.`}`,
   };
 }

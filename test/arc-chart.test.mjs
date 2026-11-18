@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { ArcChart } from '../js/arc-chart.js';
+import { ArcChart, clusterMarkers } from '../js/arc-chart.js';
 
 globalThis.window = { devicePixelRatio: 1, addEventListener() {} };
 globalThis.requestAnimationFrame = () => 1;
@@ -12,4 +12,6 @@ chart.breakLine(2);
 chart.push(2.05, 20, 40);
 assert.equal(chart.data.at(-2).r, null);
 assert.equal(chart.data.at(-1).r, 40);
+const clusters = clusterMarkers([{ t: 1, type: 'pain' }, { t: 19, type: 'pain' }, { t: 19.5, type: 'click' }, { t: 20, type: 'pull' }], t => t * 10);
+assert.deepEqual(clusters.map(c => c.marks.length), [1, 3], 'recent events collapse into a readable count instead of a pile at the edge');
 console.log('timeline: loop restarts break both traces and reset smoothing');

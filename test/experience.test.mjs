@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { TESTS } from '../js/protocol.js';
 import { RepCounter } from '../js/rehab.js';
-import { demoTestPose, displayReport, formatValue, phaseTitle, intakePlan, cameraErrorMessage, collectMarkers, reportHeadline, reconcilePain, reportMotion } from '../js/experience.js';
+import { demoTestPose, displayReport, formatValue, phaseTitle, intakePlan, cameraErrorMessage, collectMarkers, reportHeadline, reconcilePain, reportMotion, painArcEvidence } from '../js/experience.js';
 import { renderReport, reportToText } from '../js/report.js';
+import { armFromAngles } from '../js/metrics.js';
 
 for (const test of TESTS.filter(t => t.mode !== 'manual')) {
   const pose = demoTestPose(test, 1);
@@ -22,6 +23,14 @@ for (const test of TESTS.filter(t => t.mode !== 'manual')) {
   }
 }
 assert.ok(demoTestPose(TESTS.find(t => t.id === 'obrien'), 0));
+for (const time of [0, 1, 2, 4]) {
+  const hawkins = demoTestPose(TESTS.find(t => t.id === 'hawkins'), time);
+  const obrien = demoTestPose(TESTS.find(t => t.id === 'obrien'), time);
+  const hawkinsArm = armFromAngles(hawkins.elevation, hawkins.plane, hawkins.rotation, hawkins.elbowFlex);
+  const obrienArm = armFromAngles(obrien.elevation, obrien.plane, obrien.rotation, obrien.elbowFlex);
+  assert.ok(hawkinsArm.u[2] > .99 && hawkinsArm.f[1] <= .001, 'Hawkins stays forward with the forearm across/down, not into the skull');
+  assert.ok(obrienArm.u[0] < 0 && obrienArm.u[2] > .95 && obrien.elbowFlex < 5, 'O’Brien reaches slightly across the body with a straight elbow');
+}
 assert.notEqual(demoTestPose(TESTS.find(t => t.id === 'flex'), 1).plane, demoTestPose(TESTS.find(t => t.id === 'abd'), 1).plane);
 assert.equal(demoTestPose(TESTS.find(t => t.id === 'palpate'), 0), null);
 const report = displayReport({ conditions: [{ name: 'Labral irritation', p: .7 }], summary: 'calm the tendon', plan: [], flags: [] }, { completed: 2, total: 8, simulated: true });
@@ -61,18 +70,18 @@ renderReport(container, report);
 assert.match(container.innerHTML, /Your markers/);
 assert.match(container.innerHTML, /85°/);
 assert.match(reportToText(report), /YOUR MARKERS/);
-const emergency = displayReport({ conditions: [{ name: 'Cuff condition', p: .8 }], flags: [{ level: 'emergency', text: 'Chest pain' }], plan: [{ items: [{ name: 'Exercise' }] }], stoppedForSafety: true }, { completed: 0, total: 8 });
-assert.match(emergency.summary, /^Call emergency services now/);
+const emergency = displayReport({ conditions: [{ name: 'Cuff condition', p: .8 }], flags: [{ level: 'emergency', text: 'Chest pain' }], plan: [{ items: [{ name: 'Unsafe drill' }] }], stoppedForSafety: true }, { completed: 0, total: 8 });
+assert.match(emergency.summary, /Do not continue movement testing/);
 renderReport(container, emergency);
 assert.match(container.innerHTML, /tel:911/);
 assert.doesNotMatch(container.innerHTML, /Cuff condition|Rehab plan|What it could be/);
-assert.doesNotMatch(reportToText(emergency), /Cuff condition|Exercise/);
+assert.doesNotMatch(reportToText(emergency), /Cuff condition|Unsafe drill/);
 assert.doesNotMatch(reportToText({ ...emergency, serve: ['Serve drills'], next: ['Start exercises'] }), /Serve drills|Start exercises/);
 assert.match(reportToText(emergency), /Call emergency services now/);
 renderReport(container, { ...report, completion: { simulated: false } });
 assert.doesNotMatch(container.innerHTML, /±10|accuracy/i);
 const nerve = displayReport({ conditions: [], nerveReferral: true }, { completed: 8, total: 8 });
-assert.match(nerve.summary, /^Ask a clinician about your neck \/ nerves/);
+assert.doesNotMatch(nerve.summary, /Ask a clinician about your neck \/ nerves/);
 renderReport(container, nerve);
 assert.match(container.innerHTML, /Referral:.*neck and nerves/);
 assert.match(reportToText(nerve), /Referral:.*neck and nerves/);
@@ -117,4 +126,24 @@ assert.deepEqual(reportMotion({ tests: {
 assert.deepEqual(reportMotion({ tests: { flex: { complete: false, sides: { R: { maxElev: 100 } } } } }).forward, { R: null, L: null });
 renderReport(container, { ...portrait, motion: { forward: {}, side: { R: 145, L: 160 } } });
 assert.match(container.innerHTML, /Range of motion, side raise: right 145°, left 160°/);
+renderReport(container, portrait);
+assert.match(container.innerHTML, /Peak elevation during forward raises/);
+assert.doesNotMatch(container.innerHTML, /Side raise · R/);
+const arcEvidence = painArcEvidence({ follow: { arc: 'top' }, markers: [
+  { type: 'pain', side: 'R', elevation: 111 }, { type: 'pain', side: 'R', elevation: 69 },
+  { type: 'pain', side: 'L', elevation: 170 },
+] }, 'R');
+assert.equal(arcEvidence.arc, 'middle');
+assert.match(arcEvidence.explanation, /near the top.*69–111°.*weighted the markers/);
+assert.equal(painArcEvidence({ follow: { arc: 'none' }, markers: [] }, 'R').arc, 'none');
+assert.equal(painArcEvidence({ follow: {}, markers: [{ type: 'pain', elevation: 153 }] }, 'R').arc, 'top');
+renderReport(container, emergency);
+assert.equal((container.innerHTML.match(/Call emergency services now/g) || []).length, 1, 'emergency heading is not repeated in summary');
+renderReport(container, nerve);
+assert.equal((container.innerHTML.match(/Ask a clinician about your neck/g) || []).length, 1);
+renderReport(container, { ...emergency, summary: 'Call emergency services now. Do not continue movement testing.',
+  flags: [{ level: 'emergency', text: 'Chest pain. Call emergency services now.' }] });
+assert.equal((container.innerHTML.match(/Call emergency services now/g) || []).length, 1, 'older saved safety reports also deduplicate emergency copy');
+renderReport(container, { ...nerve, summary: 'Ask a clinician about your neck / nerves. Arrange an assessment for numbness, tingling or pain past the elbow. No strong screening pattern was found.' });
+assert.equal((container.innerHTML.match(/Ask a clinician about your neck/g) || []).length, 1, 'older saved nerve reports also keep referral copy in the hero only');
 console.log('experience: test-specific demo, report provenance and readable values pass');

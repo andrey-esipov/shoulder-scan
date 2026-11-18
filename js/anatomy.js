@@ -211,6 +211,20 @@ export function createAnatomy(container, { onHover } = {}) {
     m.userData.baseEmissive = m.emissive ? m.emissive.getHex() : 0;
     m.userData.baseIntensity = m.emissiveIntensity ?? 1;
     m.userData.layer = kind;
+    if (kind !== 'skin') {
+      const emphasis = { value: 0 };
+      m.userData.emphasis = emphasis;
+      m.onBeforeCompile = shader => {
+        shader.uniforms.uEmphasis = emphasis;
+        shader.fragmentShader = shader.fragmentShader
+          .replace('#include <common>', '#include <common>\nuniform float uEmphasis;')
+          .replace('#include <opaque_fragment>', `
+            float edge = pow(1.0 - abs(dot(normalize(normal), normalize(vViewPosition))), 2.0);
+            outgoingLight += vec3(1.0, 0.18, 0.035) * edge * uEmphasis;
+            #include <opaque_fragment>`);
+      };
+      m.customProgramCacheKey = () => 'anatomy-emphasis';
+    }
     mats.push(m);
     return m;
   }
@@ -511,6 +525,7 @@ export function createAnatomy(container, { onHover } = {}) {
     for (const s of Object.values(STRUCT)) {
       let o = (layerVal[s.layer] ?? 1) * peelFactor(s.depth);
       if (focus && !focus.has(s.id) && SOFT.has(s.layer)) o *= 0.12;
+      if (s.id === 'trapUpper' && activePreset !== 'scapula') o = 0;
       if (ghost[s.id] != null) o *= ghost[s.id];
       s.opacity = o;
       for (const m of s.meshes) {
@@ -539,7 +554,7 @@ export function createAnatomy(container, { onHover } = {}) {
       cam: { pos: V(32, 2, 72), target: V(16, -10, -1) } },
     lat: { layers: { skin: 0, muscles: 1, cuff: 0.6, nerves: 0 }, focus: ['lat', 'teresMajor', 'serratus', 'infraspinatus', 'teresMinor'],
       cam: { pos: V(44, -6, -72), target: V(10, -14, -6) } },
-    scapula: { layers: { skin: 0, muscles: 0.95, cuff: 0.4, nerves: 0 }, focus: ['serratus', 'trapUpper', 'trapMid', 'trapLower', 'rhomboids'],
+    scapula: { layers: { skin: 0, muscles: 0.95, cuff: 0.4, nerves: 0 }, focus: ['scapula', 'serratus', 'trapUpper', 'trapMid', 'trapLower', 'rhomboids'],
       cam: { pos: V(24, 30, -72), target: V(8, -6, -6) } },
     nerves: { layers: { skin: 0, muscles: 0.12, cuff: 0.15, nerves: 1, labrum: 0.4 }, focus: ['plexus', 'suprascapularN', 'axillaryN', 'longThoracicN'],
       cam: { pos: V(42, 10, 60), target: V(12, -6, -2) } },
@@ -548,10 +563,10 @@ export function createAnatomy(container, { onHover } = {}) {
   let sideSign = 1;
   let tween = null;
   let idleMode = false, activePreset = 'full', regionView = false, panelOpen = false;
-  function flyTo(cam, dur = 0.8) {
+  function flyTo(cam, dur = 0.4) {
     const target = cam.target.clone(); target.x *= sideSign;
     const distance = cam.pos.distanceTo(cam.target);
-    if (panelOpen && container.clientWidth > 700) target.x += distance * Math.tan(camera.fov * Math.PI / 360) * 275 / Math.max(1, viewHeight);
+    if (panelOpen && container.clientWidth > 700) target.x -= distance * Math.tan(camera.fov * Math.PI / 360) * 275 / Math.max(1, viewHeight);
     const pos = target.clone().add(V(0, 0, distance));
     tween = { t: 0, dur, p0: camera.position.clone(), t0: controls.target.clone(), p1: pos, t1: target };
   }
@@ -607,6 +622,15 @@ export function createAnatomy(container, { onHover } = {}) {
     });
     if (intersectsChest) {
       const safe = V(f[0] * .35, f[1], Math.max(.65, Math.abs(f[2]))).normalize();
+      safe.toArray(f);
+    }
+    // Keep every point of the forearm/hand outside the skull during transitions.
+    const intersectsHead = [0.2, 0.4, 0.6, 0.8, 1, 1.25].some(t => {
+      const p = elbowW.clone().addScaledVector(V(...f), 28 * t);
+      return (p.x / 12) ** 2 + ((p.y - 20) / 16) ** 2 + (p.z / 13) ** 2 < 1;
+    });
+    if (intersectsHead) {
+      const safe = V(f[0], Math.min(0, f[1]), Math.max(.85, f[2])).normalize();
       safe.toArray(f);
     }
     const fy = V(-f[0], -f[1], -f[2]).normalize();
@@ -702,7 +726,10 @@ export function createAnatomy(container, { onHover } = {}) {
 
   // ---------- Stress / strain tint ----------
   const stress = {};
-  function setStress(indices = {}) { Object.assign(stress, indices); }
+  function setStress(indices = {}) {
+    for (const key of Object.keys(stress)) stress[key] = 0;
+    Object.assign(stress, indices);
+  }
   function tint(now) {
     const strainById = {};
     for (const d of dyn) strainById[d.s.id] = Math.max(strainById[d.s.id] ?? -1, (d.L - d.L0) / d.L0);
@@ -711,7 +738,8 @@ export function createAnatomy(container, { onHover } = {}) {
     for (const s of Object.values(STRUCT)) {
       s.strain = strainById[s.id] ?? 0;
       const stretchHeat = clamp((s.strain - 0.06) / 0.3, 0, 1) * 0.7;
-      const heat = Math.max(s.hot, stretchHeat);
+      const selected = focus?.has(s.id);
+      const heat = Math.max(s.hot, stretchHeat, selected ? .8 : 0);
       const hov = hovered === s ? 0.55 : 0;
       for (const m of s.meshes) {
         const mt = m.material;
@@ -719,7 +747,10 @@ export function createAnatomy(container, { onHover } = {}) {
         mt.color.copy(mt.userData.baseColor);
         if (heat > 0.05) mt.color.lerp(tmpC.setHex(0xff4f1f), Math.min(1, heat * 1.2));
         mt.opacity = Math.min(1, s.opacity * (1 + heat * .6));
-        if (hov) mt.color.lerp(tmpC.setHex(0x777770), .25);
+        mt.emissive.setHex(0xff4f1f);
+        mt.emissiveIntensity = selected ? .32 : heat * .12;
+        if (mt.userData.emphasis) mt.userData.emphasis.value = selected ? .7 : hov ? .45 : 0;
+        if (hov) mt.color.lerp(tmpC.setHex(0xff4f1f), .45);
       }
     }
     for (const g of glows) {
@@ -729,7 +760,7 @@ export function createAnatomy(container, { onHover } = {}) {
       g.ring.position.copy(g.glow.position);
       const o = smoothstep(g.v, 0.2, 0.7);
       g.glow.material.opacity = o * 0.42;
-      g.glow.scale.setScalar(12 + 8 * g.v);
+      g.glow.scale.setScalar(activePreset === 'nerves' ? 4 + 3 * g.v : 9 + 5 * g.v);
       const ph = (now * 0.9) % 1;
       g.ring.material.opacity = 0;
       g.ring.material.color.copy(g.glow.material.color);
@@ -810,7 +841,8 @@ export function createAnatomy(container, { onHover } = {}) {
     for (const p of corePoints) stageBounds.expandByPoint(corner.copy(p).project(camera));
     return stageBounds;
   }
-  function fitDemo() {
+  function fitDemo(immediate = false, dt = .016) {
+    const previousPosition = camera.position.clone(), previousTarget = controls.target.clone();
     collectCorePoints();
     inverseView.copy(camera.quaternion).invert();
     viewBounds.makeEmpty();
@@ -827,11 +859,17 @@ export function createAnatomy(container, { onHover } = {}) {
       corner.set((box.min.x + box.max.x) / 2 * distance * tan * camera.aspect,
         (box.min.y + box.max.y) / 2 * distance * tan, 0).applyQuaternion(camera.quaternion);
       fitTarget.add(corner);
-      distance *= Math.max((box.max.y - box.min.y) / 2 / .92, (box.max.x - box.min.x) / 2 / .94);
+      distance *= Math.max((box.max.y - box.min.y) / 2 / .86, (box.max.x - box.min.x) / 2 / .90);
       camera.position.copy(fitTarget).addScaledVector(viewDirection, distance);
       camera.lookAt(fitTarget);
     }
-    controls.target.copy(fitTarget);
+    if (immediate) controls.target.copy(fitTarget);
+    else {
+      const k = 1 - Math.exp(-dt * 10);
+      camera.position.lerp(previousPosition, 1 - k);
+      controls.target.lerpVectors(previousTarget, fitTarget, k);
+      camera.lookAt(controls.target);
+    }
   }
   function frame(nowMs) {
     if (disposed) return;
@@ -865,7 +903,7 @@ export function createAnatomy(container, { onHover } = {}) {
       if (tween.t >= 1) tween = null;
     }
     controls.update();
-    if (!regionView && !tween) fitDemo();
+    if (!regionView && !tween) fitDemo(false, dt);
     tint(nowMs / 1000);
     halo.material.opacity = 0.06 + 0.03 * Math.sin(nowMs / 1400);
     renderer.render(scene, camera);
@@ -935,21 +973,64 @@ export function createAnatomy(container, { onHover } = {}) {
     setStress,
     getStrain() { return Object.fromEntries(Object.values(STRUCT).map((s) => [s.id, s.strain])); },
     resetView() { flyTo(HOME); },
-    snapshot({ crop = false } = {}) {
-      renderer.render(scene, camera);
-      const source = renderer.domElement;
-      if (!crop) return source.toDataURL('image/png');
-      collectCorePoints();
-      const bounds = projectedCore(), ratio = source.width / container.clientWidth;
-      const height = Math.round(viewHeight * ratio), margin = 12 * ratio;
-      const x = Math.max(0, Math.floor((bounds.min.x + 1) * source.width / 2 - margin));
-      const y = Math.max(0, Math.floor((1 - bounds.max.y) * height / 2 - margin));
-      const w = Math.max(1, Math.min(source.width, (bounds.max.x + 1) * source.width / 2 + margin) - x);
-      const h = Math.max(1, Math.min(height, (1 - bounds.min.y) * height / 2 + margin) - y);
-      const scale = Math.min(1, 560 / Math.max(w, h)), image = document.createElement('canvas');
-      image.width = Math.round(w * scale); image.height = Math.round(h * scale);
-      image.getContext('2d').drawImage(source, x, y, w, h, 0, 0, image.width, image.height);
-      return image.toDataURL('image/webp', .9);
+    snapshot({ crop = false, frame: savedFrame = null } = {}) {
+      const saved = savedFrame ? {
+        cur: { ...cur, _lastZ: cur._lastZ.clone() }, other: { ...otherC, _lastZ: otherC._lastZ.clone() }, torso: { ...torsoC }, stress: { ...stress },
+        position: camera.position.clone(), target: controls.target.clone(), fit: fitTarget.clone(),
+        layers: { ...layerVal }, focus, ghost, peel, activePreset, regionView, tween, sideSign,
+      } : null;
+      try {
+        if (savedFrame) {
+          const { other, torso, ...arm } = savedFrame.pose;
+          Object.assign(cur, arm);
+          Object.assign(otherC, other || { elevation: 8, plane: 30, rotation: 0, elbowFlex: 10, hike: 0 });
+          Object.assign(torsoC, torso || { yaw: 0, flex: 0, lean: 0 });
+          root.scale.x = savedFrame.side === 'L' ? -1 : 1;
+          applyPreset('full', { frame: false });
+          Object.assign(stress, savedFrame.stress);
+          trunk.rotation.set(torsoC.flex * DEG2RAD, -torsoC.yaw * DEG2RAD, -torsoC.lean * DEG2RAD, 'YXZ');
+          solve(); solveOther();
+          camera.position.set(0, -20, 300); controls.target.set(0, -20, 0); controls.update();
+          fitDemo(true);
+          tint(performance.now() / 1000);
+          for (const g of glows) {
+            resolve(g.a, g.glow.position);
+            g.glow.material.opacity = (stress[g.key] || 0) * .55;
+          }
+        }
+        renderer.render(scene, camera);
+        const source = renderer.domElement;
+        if (!crop) return source.toDataURL('image/png');
+        collectCorePoints();
+        if (savedFrame) {
+          // The report shows a shoulder detail, not another full-body stage.
+          for (const point of corePoints) {
+            point.x = clamp(point.x, -42, 42);
+            point.y = clamp(point.y, -30, 38);
+          }
+        }
+        const bounds = projectedCore(), ratio = source.width / container.clientWidth;
+        const height = Math.round(viewHeight * ratio), margin = 12 * ratio;
+        const x = Math.max(0, Math.floor((bounds.min.x + 1) * source.width / 2 - margin));
+        const y = Math.max(0, Math.floor((1 - bounds.max.y) * height / 2 - margin));
+        const w = Math.max(1, Math.min(source.width, (bounds.max.x + 1) * source.width / 2 + margin) - x);
+        const h = Math.max(1, Math.min(height, (1 - bounds.min.y) * height / 2 + margin) - y);
+        const scale = Math.min(1, 560 / Math.max(w, h)), image = document.createElement('canvas');
+        image.width = Math.round(w * scale); image.height = Math.round(h * scale);
+        image.getContext('2d').drawImage(source, x, y, w, h, 0, 0, image.width, image.height);
+        return image.toDataURL('image/webp', .9);
+      } finally {
+        if (saved) {
+          Object.assign(cur, saved.cur); Object.assign(otherC, saved.other); Object.assign(torsoC, saved.torso);
+          Object.assign(stress, saved.stress); Object.assign(layerVal, saved.layers);
+          ({ focus, ghost, peel, activePreset, regionView, tween } = saved);
+          root.scale.x = saved.sideSign;
+          camera.position.copy(saved.position); controls.target.copy(saved.target); fitTarget.copy(saved.fit);
+          trunk.rotation.set(torsoC.flex * DEG2RAD, -torsoC.yaw * DEG2RAD, -torsoC.lean * DEG2RAD, 'YXZ');
+          solve(); solveOther(); applyVisibility(); tint(performance.now() / 1000);
+          controls.update(); renderer.render(scene, camera);
+        }
+      }
     },
     structures: STRUCT,
     resize,

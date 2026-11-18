@@ -8,6 +8,11 @@ const txt = (x) => (x == null ? '' : typeof x === 'string' ? x : x.text ?? x.lab
 const strength = p => p >= .65 ? 'Strong' : p >= .35 ? 'Some' : 'Weak';
 const arr = (x) => (Array.isArray(x) ? x : []);
 const nerveReferral = 'Referral: arrange a clinical assessment of your neck and nerves for symptoms past the elbow.';
+const flagText = f => String(f.text || '').replace(/\s*Call emergency services now\.?/gi, '').trim();
+function summaryText(report) {
+  if (arr(report.flags).some(f => f.level === 'emergency')) return 'Do not continue movement testing. Exercises are paused until a clinician clears you.';
+  return String(report.summary || '').replace(/^Ask a clinician about your neck\s*\/\s*nerves\.\s*Arrange an assessment for numbness, tingling or pain past the elbow\.\s*/i, '');
+}
 
 function labelClass(label) {
   const l = String(label || '').toLowerCase();
@@ -73,25 +78,27 @@ function motionChart(motion = {}, simulated = false) {
     <svg class="rom-chart" viewBox="0 0 360 172" role="img" aria-label="Range of motion, ${name.toLowerCase()}: right ${value('R')}, left ${value('L')}">
       ${ticks}${arcs}<text x="20" y="169">0°</text><text x="330" y="169">180°</text>
     </svg>
-    <div class="rom-values"><div><span class="rom-side R">Right</span><strong>${value('R')}</strong></div><div><span class="rom-side L">Left</span><strong>${value('L')}</strong></div></div>
-    <p class="rom-note">${missing ? 'No movement measurements recorded.' : useSide ? 'Peak elevation during side raises.' : `Side raise · R ${known(side.R) ? `${side.R}°` : '—'} / L ${known(side.L) ? `${side.L}°` : '—'}`}</p>
+    <div class="rom-values"><div><span class="rom-side R">R · Right</span><strong>${value('R')}</strong></div><div><span class="rom-side L">L · Left</span><strong>${value('L')}</strong></div></div>
+    <p class="rom-note">${missing ? 'No movement measurements recorded.' : `Peak elevation during ${name.toLowerCase()}s.`}</p>
   </figure>`;
 }
 
 function reportHero(report) {
   const lead = arr(report.conditions).slice().sort((a, b) => (b.p || 0) - (a.p || 0))[0];
   const title = report.nerveReferral ? 'Ask a clinician about your neck / nerves'
-    : lead?.p >= .35 ? lead.name : 'No strong screening pattern';
+    : lead?.p >= .35 ? lead.name.replace(/\s*\([^)]*\)/g, '') : 'No strong screening pattern';
   const image = /^data:image\/(?:png|webp);base64,[A-Za-z0-9+/=]+$/.test(report.anatomySnapshot || '')
     ? `<img class="rp-anatomy-image" src="${esc(report.anatomySnapshot)}" alt="3D anatomy captured from this screening session">`
     : '<div class="rp-anatomy-empty">No anatomy snapshot saved for this session.</div>';
   const completion = report.completion;
+  const imageLabel = report.anatomyCapture?.kind === 'peak-load' ? 'Peak-load shoulder detail' : 'Session anatomy';
   return `<section class="rp-hero">
+    <div class="rp-brand"><svg viewBox="0 0 32 32" width="23" height="23" aria-hidden="true"><circle cx="9" cy="23" r="7"/><circle cx="23" cy="9" r="7"/></svg><span>Shoulder Scan</span><time>${esc(new Date(report.generatedAt || Date.now()).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }))}</time></div>
     <h3 class="rp-hero-title">${esc(title)}</h3>
     <p class="rp-hero-context">${report.nerveReferral ? nerveReferral : lead?.p >= .35 ? 'A screening finding to explore with a clinician, not a diagnosis.' : 'The screen is inconclusive. A clinician can help you understand your symptoms.'}</p>
     <div class="rp-hero-status">${completion?.simulated ? '<span class="rp-simulated">Simulated demo · Not a clinical result</span>' : '<span>Camera angles are estimates</span>'}${completion && completion.completed < completion.total ? `<span>Partial exam: ${completion.completed} of ${completion.total} tests. Results are provisional.</span>` : ''}</div>
     <div class="rp-hero-visuals">${motionChart(report.motion, completion?.simulated)}
-      <figure class="rp-anatomy"><div class="rp-anatomy-plate">${image}</div><figcaption>Session anatomy${completion?.simulated ? ' · simulated' : ''}</figcaption></figure>
+      <figure class="rp-anatomy"><div class="rp-anatomy-plate">${image}</div><figcaption>${imageLabel}${completion?.simulated ? ' · simulated' : ''}<span>Saved with this session</span></figcaption></figure>
     </div>
     <p class="rp-hero-credit">Screening aid, not a diagnosis.<br>Bones: BodyParts3D © DBCLS · CC BY-SA 2.1 JP</p>
   </section>`;
@@ -139,10 +146,10 @@ export function renderReport(container, report) {
 
   if (flags.length) {
     const lvlName = { emergency: 'Emergency', urgent: 'Urgent', soon: 'See a doctor' };
-    out.push(`<div class="rp-flags">${flags.map((f) => `<div class="rp-flag ${esc(f.level)}">${f.level === 'emergency' ? '<strong>Call emergency services now</strong><a href="tel:911">Call 911 / your local emergency number</a>' : `<strong>${esc(lvlName[f.level] || 'Get checked')}</strong>`}<span>${esc(f.text)}</span></div>`).join('')}</div>`);
+    out.push(`<div class="rp-flags">${flags.map((f) => `<div class="rp-flag ${esc(f.level)}">${f.level === 'emergency' ? '<strong>Call emergency services now</strong><a href="tel:911">Call 911 / your local emergency number</a>' : `<strong>${esc(lvlName[f.level] || 'Get checked')}</strong>`}<span>${esc(flagText(f))}</span></div>`).join('')}</div>`);
   }
 
-  if (report.summary) out.push(section('Summary', `<p class="rp-summary">${md(report.summary)}</p>${report.nerveReferral ? `<p>${nerveReferral}</p>` : ''}`));
+  if (report.summary) out.push(section('Summary', `<p class="rp-summary">${md(summaryText(report))}</p>${report.painReconciliation ? `<p class="rp-reconciliation">${esc(report.painReconciliation)}</p>` : ''}`));
 
   const conds = (flags.length ? [] : arr(report.conditions)).slice().sort((a, b) => (b.p || 0) - (a.p || 0));
   if (conds.length) {
@@ -151,7 +158,7 @@ export function renderReport(container, report) {
     const rest = conds.filter((c) => !shown.includes(c));
     let body = `<div class="rp-conds">${shown.map((c, i) => condCard(c, { top: i === 0 })).join('')}</div>`;
     if (rest.length) {
-      body += `<details class="rp-more"><summary>${rest.length} less likely condition${rest.length > 1 ? 's' : ''}</summary><div class="rp-conds">${rest.map((c) => condCard(c)).join('')}</div></details>`;
+      body += `<details class="rp-sec rp-more"><summary><span>${rest.length} less likely condition${rest.length > 1 ? 's' : ''}</span></summary><div class="rp-conds">${rest.map((c) => condCard(c)).join('')}</div></details>`;
     }
     out.push(section('What it could be', body));
   }
@@ -161,7 +168,7 @@ export function renderReport(container, report) {
     out.push(section('Likely drivers', `<p class="rp-muted" style="margin:0 0 8px">Not diagnoses — the reasons the tissue got overloaded.</p><div class="rp-conds">${drivers.map((d) => condCard(d, { driver: true })).join('')}</div>`, { open: false, count: drivers.length }));
   }
 
-  const markers = arr(report.markers);
+  const markers = arr(report.markers).slice().sort((a, b) => (a.elapsed || 0) - (b.elapsed || 0));
   out.push(section('Your markers', markers.length ? `<ul class="rp-markers">${markers.map(m => {
     const { label, context } = markerText(m);
     return `<li><strong>${esc(label)}</strong><span>${esc(context)}</span></li>`;
@@ -181,7 +188,7 @@ export function renderReport(container, report) {
   const serve = (flags.length ? [] : arr(report.serve)).map(txt).filter(Boolean);
   if (serve.length) out.push(section('Serve modifications', `<ul class="rp-list">${serve.map((s) => `<li>${md(s)}</li>`).join('')}</ul>`, { open: false, count: serve.length }));
 
-  const next = (flags.length ? flags.map(f => f.text) : arr(report.next)).map(txt).filter(Boolean);
+  const next = (flags.length ? [] : arr(report.next)).map(txt).filter(Boolean);
   if (next.length) out.push(section('Next steps', `<ol class="rp-list">${next.map((s) => `<li>${md(s)}</li>`).join('')}</ol>`));
 
   const found = arr(report.found).map(txt).filter(Boolean);
@@ -205,10 +212,11 @@ export function reportToText(report) {
   const flags = arr(report.flags);
   if (flags.length) {
     L.push('!! RED FLAGS');
-    flags.forEach((f) => L.push(`  [${String(f.level || '').toUpperCase()}] ${f.text}`));
+    if (flags.some(f => f.level === 'emergency')) L.push('Call emergency services now. Call 911 / your local emergency number.');
+    flags.forEach((f) => L.push(`  [${String(f.level || '').toUpperCase()}] ${flagText(f)}`));
     L.push('');
   }
-  if (report.summary) L.push('SUMMARY', stripMd(report.summary), '');
+  if (report.summary) L.push('SUMMARY', stripMd(summaryText(report)), '');
   if (report.nerveReferral) L.push(nerveReferral, '');
   if (report.completion?.completed < report.completion?.total) L.push(`Partial exam: ${report.completion.completed} of ${report.completion.total} tests. Results are provisional.`, '');
   if (report.completion?.simulated) L.push('Simulated demo — not a clinical result.', '');
@@ -247,7 +255,7 @@ export function reportToText(report) {
     });
     L.push('');
   }
-  const lists = [['SERVE MODIFICATIONS', flags.length ? [] : report.serve], ['NEXT STEPS', flags.length ? flags.map(f => f.text) : report.next], ['WHAT WE FOUND', report.found]];
+  const lists = [['SERVE MODIFICATIONS', flags.length ? [] : report.serve], ['NEXT STEPS', flags.length ? [] : report.next], ['WHAT WE FOUND', report.found]];
   lists.forEach(([title, items]) => {
     const a = arr(items).map(txt).filter(Boolean);
     if (!a.length) return;

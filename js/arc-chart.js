@@ -7,6 +7,16 @@ const ROT = { color: '#707078', min: -90, max: 120, label: 'Rotation' };
 const GRID = [0, 90, 180];
 const PAD = { l: 34, r: 10, t: 12, b: 10 };
 
+export function clusterMarkers(marks, X) {
+  const clusters = [];
+  for (const mark of marks.slice().sort((a, b) => a.t - b.t)) {
+    const x = X(mark.t), previous = clusters.at(-1);
+    if (previous && x - previous.x < 18) { previous.marks.push(mark); previous.x = x; }
+    else clusters.push({ x, marks: [mark] });
+  }
+  return clusters;
+}
+
 export class ArcChart {
   constructor(canvas) {
     this.canvas = canvas;
@@ -137,10 +147,9 @@ export class ArcChart {
     ctx.beginPath(); ctx.rect(x0, 0, pw, h); ctx.clip();
 
     // markers (behind lines)
-    const glyphs = [];
-    for (const m of this.marks) {
-      if (m.t < tStart) continue;
-      const x = Math.round(X(m.t)) + 0.5;
+    for (const cluster of clusterMarkers(this.marks.filter(m => m.t >= tStart), X)) {
+      const m = cluster.marks[0], count = cluster.marks.length;
+      const x = Math.round(cluster.x) + 0.5;
       const c = MARK_COLORS[m.type] || '#343439';
       const grad = ctx.createLinearGradient(0, y0, 0, y1);
       grad.addColorStop(0, c); grad.addColorStop(1, 'rgba(0,0,0,0)');
@@ -152,13 +161,16 @@ export class ArcChart {
       const drop = age < .5 ? 7 * (1 - age / .5) ** 3 : 0;
       ctx.font = '600 13px system-ui, sans-serif';
       ctx.textAlign = 'center';
-      let glyphX = Math.min(x1 - 7, Math.max(x0 + 7, x)), glyphY = y0 + 4;
-      while (glyphs.some(g => Math.abs(g.x - glyphX) < 15 && Math.abs(g.y - glyphY) < 15)) {
-        glyphY += 15;
-        if (glyphY > y1 - 4) { glyphY = y0 + 4; glyphX -= 16; }
-      }
-      glyphs.push({ x: glyphX, y: glyphY });
+      const glyphX = Math.min(x1 - 11, Math.max(x0 + 11, x)), glyphY = y0 + 4;
       ctx.save();
+      if (count > 1) {
+        ctx.beginPath(); ctx.arc(glyphX, glyphY + 2, 10, 0, Math.PI * 2);
+        ctx.fillStyle = c; ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.font = '600 11px system-ui, sans-serif';
+        ctx.fillText(String(count), glyphX, glyphY + 2);
+        ctx.restore();
+        continue;
+      }
       ctx.translate(glyphX - 7, glyphY - drop - 7);
       ctx.scale(14 / 24, 14 / 24);
       ctx.strokeStyle = c; ctx.lineWidth = 1.8; ctx.lineCap = 'round'; ctx.lineJoin = 'round';

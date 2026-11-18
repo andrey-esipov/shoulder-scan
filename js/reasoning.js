@@ -7,6 +7,7 @@
 // for education. It is not a diagnosis.
 
 import { EXERCISES } from './rehab.js';
+import { painArcEvidence } from './experience.js';
 
 const arr = (v) => (v == null ? [] : Array.isArray(v) ? v : [v]);
 const has = (v, ...xs) => arr(v).some((a) => xs.includes(a));
@@ -35,12 +36,9 @@ export function extractFeatures(state) {
   const num = {};
 
   // Painful arc: answer or pain markers during side raise
-  const arc = fu('abd', 'arc');
-  const abdPain = markers('abd', 'pain').map((m) => m.elevation).filter((e) => e != null);
-  const midMarks = abdPain.filter((e) => e >= 55 && e <= 135).length;
-  const topMarks = abdPain.filter((e) => e >= 145).length;
-  f.painfulArc = arc === 'middle' || (midMarks > 0 && topMarks === 0) ? true : tri(answered(arc) || done('abd'), false);
-  f.highArc = arc === 'top' || topMarks > 0 ? true : tri(answered(arc), false);
+  const { arc, angles: abdPain } = painArcEvidence(T.abd, A);
+  f.painfulArc = arc === 'middle' ? true : tri(answered(arc) || done('abd'), false);
+  f.highArc = arc === 'top' ? true : tri(answered(arc), false);
   if (abdPain.length) num.arcPainAt = abdPain.map((e) => Math.round(e));
 
   f.hawkins = tri(answered(fu('hawkins', 'pain')), notNone(fu('hawkins', 'pain')));
@@ -314,7 +312,7 @@ export function redFlags(state) {
   const I = state.intake || {};
   const out = [];
   const rf = arr(I.redFlags);
-  if (rf.includes('chest')) out.push({ level: 'emergency', text: 'Chest pain or shortness of breath with shoulder pain can be cardiac or lung related. Call emergency services now.' });
+  if (rf.includes('chest')) out.push({ level: 'emergency', text: 'Chest pain or shortness of breath with shoulder pain can be cardiac or lung related.' });
   if (rf.includes('fever')) out.push({ level: 'urgent', text: 'Fever with a painful joint can mean infection. Get seen today.' });
   if (rf.includes('deformity')) out.push({ level: 'urgent', text: 'Deformity after an injury suggests a dislocation or fracture. Get seen urgently.' });
   if (rf.includes('cantLift')) out.push({ level: 'urgent', text: 'Sudden inability to lift the arm can be an acute cuff tear. These are best repaired early, so see a doctor within 1–2 weeks.' });
