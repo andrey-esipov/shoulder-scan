@@ -18,11 +18,11 @@ python3 -m http.server 8000
 
 Open http://localhost:8000. Click **Try demo** without a camera, or **Start camera** to use your webcam. Stand about two meters back so your hips are in frame.
 
-For recordings, open http://localhost:8000/?demo=1 to start simulated anatomical motion automatically, without opening a camera. Add `&exam=quick` to begin the guided intake too. Demo uses only the anatomical skeleton. Its projected torso, pelvis, shoulders and upper-arm bounds fill about 85% of the anatomy pane height, subject to available width; forearms and hands may approach the edges. `__shoulder.anatomy.getFramingMetrics()` exposes the projected bounds for layout checks. Clicking a regional anatomy preset deliberately zooms to that region. A solid grey-dot source pill and underlined readout caption explicitly label **simulated**, not measured, values.
+For recordings, open http://localhost:8000/?demo=1 to start simulated anatomical motion automatically, without opening a camera. Add `&exam=quick` to begin the guided intake too. Demo uses only the anatomical skeleton. The front view fits the torso, pelvis, both arms and fingertips, including overhead and side raises. `__shoulder.anatomy.getFramingMetrics()` exposes the projected bounds for layout checks. Regional presets animate to a fixed front view; **Full** restores the whole upper body. A grey-dot source pill and underlined readout caption explicitly label **simulated**, not measured, values.
 
-During a demo exam, the simulator follows each movement test's original position gates and repetition thresholds; these movement tests complete automatically. Resistance and other manual tests explain that they cannot be simulated and require **Next**. Symptom answers are always yours. Demo reports are labeled simulated; incomplete exams include provisional completion counts.
+During a demo exam, each movement has its own scripted motion and follows the original position gates and repetition thresholds. Manual movements use an illustrated motion where possible; hands-on-only tests auto-skip with an explanation. Neither illustrates actual resistance or a clinical test result. Symptom answers are always yours. Demo reports are labeled simulated; incomplete exams include provisional completion counts.
 
-The light, stage-first layout separates bilateral elevation, bilateral ER/IR and torso turn into a dedicated strip below the model. Camera mode keeps the real video and neutral pose overlay beside the anatomy and labels values **Measured**. Open **Anatomy** above the skeleton for side selection, presets, peel and layers; expand **Tissue load** for regional loading. On phones the large anatomy leads, readings form a grid, markers are 2×2, and the exam is below the stage. During tests, anatomy and markers stay in a sticky stage occupying about 45vh. **Report** opens an honest empty state until you have exam data.
+The light, stage-first layout separates bilateral elevation, bilateral ER/IR and torso turn into a dedicated strip below the model. Camera mode keeps the real video beside the anatomy and labels values **Measured**. No stick figure or pose overlay is drawn on the video or saved camera snapshot. Open **Anatomy** for side selection, presets, peel and layers; expand **Motion** or **Tissue load** for details. On phones the source selector moves into a menu, readings form a 3+2 grid, and the 2×2 markers remain in a compact sticky stage before and during exams. Answer chips and Done remain in the page's scrolling flow. **Report** is disabled until a session exists.
 
 The camera has to be served from `localhost` (or https). Opening `index.html` as a file won't work.
 
@@ -33,9 +33,9 @@ The camera has to be served from `localhost` (or https). Opening `index.html` as
 - **3D view:** Three.js with real CT-derived bone meshes from BodyParts3D, peelable layers, and presets for the rotator cuff, labrum, biceps, lat, scapula, and nerves.
 - **Exam:** quick (4–6 min, eight intake questions) and full (12–15 min) guided exams, beginning with safety screening, then your symptoms rather than assumptions. Sport and pulling questions are conditional. Intake and movement tests have separate progress segments; opening a modal pauses movement-test counting. Voice is off by default; enable it in the header. Mark events with `P` or `Space` (pain), `C` (click), `L` (pull), `U` (unstable). Optional mic click detector.
 - **Reasoning:** a deterministic, evidence-weighted engine in `js/reasoning.js`. No LLM. The report shows what counted for and against each possibility, plus red flags.
-- **Safety:** red flags block testing with advice to seek care and an explicit, not-advised override. Ending saves the concern to History and offers Start over. Exercises remain paused while flags are present.
-- **Reports:** include your marker type, side, angle, test and time. History uses the same summary headline. Weak-pattern and demo reports keep the rehab plan collapsed. Completing a screening offers View report, Start new exam and Go to Rehab.
-- **Rehab:** a phased plan with a live-camera coach that counts reps. Coaching is disabled during an exam; Demo offers a camera-start prompt instead.
+- **Safety:** red flags block testing with an explicit, not-advised override. Chest pain or shortness of breath shows **Call emergency services now** with an emergency telephone link outside the scrolling content. Flagged reports omit condition lists and exercise plans; Rehab explains the pause and links to the safety report. Numbness or tingling past the elbow adds a neck/nerve assessment referral.
+- **Reports:** include marker type, side, angle, test and elapsed time. Conflicting “No pain” answers prompt you to confirm or remove pain markers before scoring. History supports confirmed deletion of one or all sessions. Weak-pattern reports label exercise suggestions as a general plan. Print/PDF expands all sections and includes the date and anatomy credit; JSON export remains available. Start new exam offers a choice of exam.
+- **Rehab:** a phased plan with a live-camera coach that counts reps. Coaching is disabled during an exam. Without a camera, Demo stays visible beneath the coach's camera-start prompt; connection errors appear inline without losing markers or readouts.
 
 Your video is processed locally and never leaves your machine. The models download from public CDNs on first load. Session history is kept in `localStorage` (last 20 sessions).
 
@@ -52,6 +52,7 @@ node test/metrics.test.mjs
 node test/reasoning.test.mjs
 node test/experience.test.mjs
 node test/framing.test.mjs
+node test/arc-chart.test.mjs
 ```
 
 ## Credits and license

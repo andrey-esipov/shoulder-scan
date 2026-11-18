@@ -383,7 +383,7 @@ export function buildReport(state) {
   if (num.flex) found.push(`Forward raise: ${Math.round(num.flex.A)}° on the sore side vs ${Math.round(num.flex.O)}° on the other`);
   if (num.abd?.A != null) found.push(`Side raise: ${Math.round(num.abd.A)}° vs ${Math.round(num.abd.O ?? 0)}°`);
   if (num.arcPainAt) found.push(`Pain marked on the side raise at ${num.arcPainAt.join('°, ')}°`);
-  if (num.rot90) found.push(`90/90 rotation, sore arm: ER ${Math.round(num.rot90.erA)}° / IR ${Math.round(num.rot90.irA)}°. Other arm: ER ${Math.round(num.rot90.erO)}° / IR ${Math.round(num.rot90.irO)}°. IR deficit ${Math.round(num.rot90.gird)}° (webcam estimate ±10°)`);
+  if (num.rot90) found.push(`90/90 rotation, sore arm: ER ${Math.round(num.rot90.erA)}° / IR ${Math.round(num.rot90.irA)}°. Other arm: ER ${Math.round(num.rot90.erO)}° / IR ${Math.round(num.rot90.irO)}°. IR deficit ${Math.round(num.rot90.gird)}° (camera estimate, not a clinical measurement)`);
   if (num.erSide) found.push(`Rotation at side: ${Math.round(num.erSide.A)}° vs ${Math.round(num.erSide.O)}°`);
   if (num.hike) found.push(`Peak shoulder hike: ${Math.round(num.hike.A)}% on the sore side vs ${Math.round(num.hike.O)}%`);
   if (num.leanMax != null) found.push(`Max trunk lean during raises: ${Math.round(num.leanMax)}°`);

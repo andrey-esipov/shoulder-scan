@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { TESTS } from '../js/protocol.js';
 import { RepCounter } from '../js/rehab.js';
-import { demoTestPose, displayReport, formatValue, phaseTitle, intakePlan, cameraErrorMessage, collectMarkers, reportHeadline } from '../js/experience.js';
+import { demoTestPose, displayReport, formatValue, phaseTitle, intakePlan, cameraErrorMessage, collectMarkers, reportHeadline, reconcilePain } from '../js/experience.js';
 import { renderReport, reportToText } from '../js/report.js';
 
 for (const test of TESTS.filter(t => t.mode !== 'manual')) {
@@ -21,7 +21,9 @@ for (const test of TESTS.filter(t => t.mode !== 'manual')) {
     assert.ok(counter.count >= 3, `${test.id} finishes reps without intervention`);
   }
 }
-assert.equal(demoTestPose(TESTS.find(t => t.id === 'obrien'), 0), null);
+assert.ok(demoTestPose(TESTS.find(t => t.id === 'obrien'), 0));
+assert.notEqual(demoTestPose(TESTS.find(t => t.id === 'flex'), 1).plane, demoTestPose(TESTS.find(t => t.id === 'abd'), 1).plane);
+assert.equal(demoTestPose(TESTS.find(t => t.id === 'palpate'), 0), null);
 const report = displayReport({ conditions: [{ name: 'Labral irritation', p: .7 }], summary: 'calm the tendon', plan: [], flags: [] }, { completed: 2, total: 8, simulated: true });
 assert.match(report.summary, /Labral irritation/);
 assert.doesNotMatch(report.summary, /calm the tendon/);
@@ -59,4 +61,38 @@ renderReport(container, report);
 assert.match(container.innerHTML, /Your markers/);
 assert.match(container.innerHTML, /85°/);
 assert.match(reportToText(report), /YOUR MARKERS/);
+const emergency = displayReport({ conditions: [{ name: 'Cuff condition', p: .8 }], flags: [{ level: 'emergency', text: 'Chest pain' }], plan: [{ items: [{ name: 'Exercise' }] }], stoppedForSafety: true }, { completed: 0, total: 8 });
+assert.match(emergency.summary, /^Call emergency services now/);
+renderReport(container, emergency);
+assert.match(container.innerHTML, /tel:911/);
+assert.doesNotMatch(container.innerHTML, /Cuff condition|Rehab plan|What it could be/);
+assert.doesNotMatch(reportToText(emergency), /Cuff condition|Exercise/);
+assert.doesNotMatch(reportToText({ ...emergency, serve: ['Serve drills'], next: ['Start exercises'] }), /Serve drills|Start exercises/);
+assert.match(reportToText(emergency), /Call emergency services now/);
+renderReport(container, { ...report, completion: { simulated: false } });
+assert.doesNotMatch(container.innerHTML, /±10|accuracy/i);
+const nerve = displayReport({ conditions: [], nerveReferral: true }, { completed: 8, total: 8 });
+assert.match(nerve.summary, /^Ask a clinician about your neck \/ nerves/);
+renderReport(container, nerve);
+assert.match(container.innerHTML, /Referral:.*neck and nerves/);
+assert.match(reportToText(nerve), /Referral:.*neck and nerves/);
+const noPain = { markers: [{ type: 'pain', elevation: 71 }, { type: 'click' }], follow: { arc: 'none' } };
+reconcilePain(noPain, 'arc', false);
+assert.deepEqual(noPain.markers, [{ type: 'click' }]);
+assert.equal(noPain.follow.arc, 'none');
+noPain.markers.push({ type: 'pain', elevation: 71 });
+reconcilePain(noPain, 'arc', true);
+assert.equal(noPain.follow.arc, 'middle');
+const scalarPain = { markers: [{ type: 'pain', elevation: 90 }], follow: { pain: 'none' } };
+reconcilePain(scalarPain, 'pain', true, { multi: false });
+assert.equal(scalarPain.follow.pain, 'other');
+const cuffPain = { markers: [{ type: 'pain' }], follow: { feel: ['none'] } };
+reconcilePain(cuffPain, 'feel', true, { multi: true, opts: [{ v: 'pain' }] });
+assert.deepEqual(cuffPain.follow.feel, ['pain']);
+const unknownLocation = { markers: [{ type: 'pain' }], follow: { pain: ['none'] } };
+reconcilePain(unknownLocation, 'pain', true, { multi: true, opts: [{ v: 'none' }, { v: 'front' }, { v: 'deep' }] });
+assert.equal(unknownLocation.follow.pain, undefined, 'confirming pain must not invent its location');
+renderReport(container, { ...report, conditions: [{ name: 'Cuff', label: 'Fits well', p: .72 }] });
+assert.match(container.innerHTML, /Strong/);
+assert.doesNotMatch(container.innerHTML.replace(/<[^>]*>/g, ''), /72%|Fits well/);
 console.log('experience: test-specific demo, report provenance and readable values pass');

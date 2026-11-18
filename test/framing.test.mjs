@@ -6,6 +6,7 @@ for (const aspect of [1.9, 1, .7]) {
     { min: { x: -45, y: -66, z: -15 }, max: { x: 45, y: 32, z: 20 } },
     { min: { x: -48, y: -66, z: -25 }, max: { x: 48, y: 42, z: 30 } },
     { min: { x: -48, y: -66, z: -25 }, max: { x: 48, y: 78, z: 30 } },
+    { min: { x: -112, y: -90, z: -25 }, max: { x: 112, y: 95, z: 30 } },
   ]) {
     const { distance, target } = fitAnatomyBounds(bounds, aspect);
     const tan = Math.tan(36 * Math.PI / 360);
@@ -14,7 +15,7 @@ for (const aspect of [1.9, 1, .7]) {
         for (const z of [bounds.min.z, bounds.max.z]) {
           const depth = distance - (z - target[2]);
           assert.ok(Math.abs(x - target[0]) < depth * tan * aspect, 'both arms fit horizontally');
-          assert.ok(Math.abs(y - target[1]) < depth * tan, 'head and torso fit vertically');
+          assert.ok(Math.abs(y - target[1]) < depth * tan, 'raised hands and lowered fingertips fit vertically');
         }
   }
 }
@@ -25,4 +26,4 @@ for (const aspect of [1.9, .83]) {
   const occupancy = 98 / (2 * distance * Math.tan(36 * Math.PI / 360));
   assert.ok(occupancy >= .78 && occupancy <= .86, `torso fills stage at ${aspect}: ${occupancy}`);
 }
-console.log('framing: core fills stage; shoulders/upper arms fit desktop and narrow views');
+console.log('framing: core fills stage; full arm and fingertip span fits desktop and narrow views');

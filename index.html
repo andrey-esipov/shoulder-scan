@@ -36,7 +36,8 @@ FORM: B · Stage first. -->
       <span class="brand-name">Shoulder Scan</span>
     </div>
 
-    <nav class="source" role="group" aria-label="Motion source">
+    <button id="sourceMenuButton" class="btn" type="button" aria-expanded="false" aria-controls="sourceMenu" title="Motion source">Camera</button>
+    <nav id="sourceMenu" class="source" role="group" aria-label="Motion source">
       <button id="btnCamera" class="src" type="button" aria-pressed="false" title="Track your arm with the webcam">Live camera</button>
       <button id="btnDemo" class="src" type="button" aria-pressed="false" title="No camera needed">Demo</button>
       <button id="btnUpload" class="src" type="button" aria-pressed="false" title="Analyze a recorded movement video">Upload video</button>
@@ -45,13 +46,13 @@ FORM: B · Stage first. -->
     <div id="trackPill" class="pill" role="status" aria-live="polite"><span class="dot"></span><span class="txt">Camera off</span></div>
 
     <div class="top-actions">
-      <button id="btnReport" class="btn ghost" type="button" title="Open your report">
+      <button id="btnReport" class="btn ghost" type="button" title="Open your report" disabled>
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3v5h5M8.5 13h7M8.5 16.5h4.5"/></svg>Report
       </button>
       <button id="btnHistory" class="btn ghost icon" type="button" title="Past sessions" aria-label="Past sessions">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5"/><path d="M3.5 3.5v5h5M12 7.5V12l3 2"/></svg>
       </button>
-      <button id="btnVoiceToggle" class="btn ghost icon" type="button" title="Doctor voice on/off" aria-label="Toggle doctor voice">
+      <button id="btnVoiceToggle" class="btn ghost icon" type="button" title="Doctor voice: off" aria-label="Doctor voice" aria-pressed="false">
         <svg class="ico-on" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>
         <svg class="ico-off" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M22 9l-6 6M16 9l6 6"/></svg>
       </button>
@@ -86,9 +87,11 @@ FORM: B · Stage first. -->
     </section>
 
     <details class="sec metrics-drawer">
+      <summary>Motion</summary>
+      <div id="measure" class="meas"></div>
+    </details>
+    <details class="sec metrics-drawer">
       <summary>Tissue load</summary>
-      <div id="measure" class="meas" hidden></div>
-      <h3 class="sec-title">Tissue load</h3>
       <div id="loadMap" class="meas load"></div>
     </details>
   </aside>
@@ -100,7 +103,7 @@ FORM: B · Stage first. -->
       <div id="hudSub">Choose Camera or Demo to drive the model</div>
     </div>
 
-    <div id="holdRing" aria-live="polite">3</div>
+    <div id="holdRing" aria-live="polite"></div>
 
     <div id="camInset">
       <video id="video" playsinline muted autoplay></video>
@@ -108,7 +111,7 @@ FORM: B · Stage first. -->
       <div id="camEmpty">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="6" width="14" height="12" rx="3"/><path d="m16.5 10 5-3v10l-5-3"/></svg>
         <span>Camera off</span>
-        <div id="cameraRecovery" hidden><p>Couldn't start the camera. It may be in use by Teams or Zoom.</p><div class="welcome-actions"><button id="retryCamera" class="btn primary" type="button">Try again</button><button id="recoverDemo" class="btn" type="button">Use demo</button></div></div>
+        <div id="cameraRecovery" hidden><p>Couldn't start the camera. It may be in use by Teams or Zoom.</p><div class="welcome-actions"><button id="retryCamera" class="btn" type="button">Try again</button><button id="recoverDemo" class="btn primary" type="button">Use demo</button></div></div>
       </div>
     </div>
     <div class="cam-tools">
@@ -120,7 +123,6 @@ FORM: B · Stage first. -->
         </button>
     </div>
     <div id="demoLabel">No camera · simulated motion</div>
-    <div id="stageLegend">Mirrored, like looking in a mirror</div>
     <section id="readoutStrip" aria-label="Motion readings">
       <div id="readoutCaption"><span class="reading-dot" aria-hidden="true"></span><span>Measured values</span></div>
       <div class="readout-values">
@@ -134,12 +136,12 @@ FORM: B · Stage first. -->
 
     <div id="dock">
       <div id="markerBar" role="toolbar" aria-label="Symptom markers">
-        <button type="button" data-marker="pain"><i aria-hidden="true">ϟ</i>Pain<kbd>P</kbd></button>
-        <button type="button" data-marker="click"><i aria-hidden="true">◖</i>Click<kbd>C</kbd></button>
-        <button type="button" data-marker="pull"><i aria-hidden="true">↗</i>Pull<kbd>L</kbd></button>
-        <button type="button" data-marker="unstable"><i aria-hidden="true">△</i>Unstable<kbd>U</kbd></button>
+        <button type="button" data-marker="pain">Pain<kbd>P</kbd></button>
+        <button type="button" data-marker="click">Click<kbd>C</kbd></button>
+        <button type="button" data-marker="pull">Pull<kbd>L</kbd></button>
+        <button type="button" data-marker="unstable">Unstable<kbd>U</kbd></button>
       </div>
-      <div id="arcWrap"><canvas id="arcChart" aria-label="Elevation and rotation timeline"></canvas><div class="marker-legend"><span>ϟ Pain</span><span>◖ Click</span><span>↗ Pull</span><span>△ Unstable</span></div></div>
+      <div id="arcWrap"><canvas id="arcChart" aria-label="Elevation and rotation timeline"></canvas></div>
     </div>
 
     <div id="tooltip" role="tooltip"></div>
@@ -192,6 +194,7 @@ FORM: B · Stage first. -->
           <button id="btnPopMic" class="pop-toggle" type="button" title="Use the microphone to catch clicks and pops" aria-pressed="false">
             <span class="pt-sw"></span><span>Click detector<small>Uses your mic to mark audible pops.</small></span><span class="pop-meter"><i id="popLevel"></i></span>
           </button>
+          <span id="popStatus" role="status"></span>
         </div>
       </form>
     </div>
@@ -221,6 +224,7 @@ FORM: B · Stage first. -->
         </button>
       </div>
     </div>
+    <div id="reportSafety" role="alert"></div>
     <div id="reportBody" class="modal-body"></div>
   </div>
 </div>

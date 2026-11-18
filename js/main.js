@@ -9,7 +9,8 @@ import { voice, parseMarkerCommand } from './voice.js';
 import { PopDetector, audioSupported } from './audio.js';
 import { renderReport, reportToText, downloadJSON } from './report.js';
 import { ArcChart } from './arc-chart.js';
-import { demoTestPose, displayReport, formatValue, phaseTitle, intakePlan, pullingQuestion, cameraErrorMessage, collectMarkers, reportHeadline } from './experience.js';
+import { demoTestPose, displayReport, formatValue, phaseTitle, intakePlan, pullingQuestion, cameraErrorMessage, collectMarkers, reportHeadline, reconcilePain, reportDate } from './experience.js';
+import { markerIcon } from './marker-icons.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -107,7 +108,6 @@ function setSide(s, user = false) {
   app.side = s;
   arc.side = s;
   anatomy.setSide(s);
-  pose.setHighlight(s);
   $$('#sideToggle .seg').forEach((b) => b.classList.toggle('active', b.dataset.side === s));
   $('#hudTitle').textContent = `${SIDE_NAME[s]} shoulder`;
   if (user) toast(`Showing your ${SIDE_NAME[s].toLowerCase()} shoulder`);
@@ -272,13 +272,18 @@ pose.onLost(() => {
 /* ---------------- camera / video / demo ---------------- */
 let demoRaf = 0;
 const setSource = (id) => {
+  const selected = id || 'btnCamera';
   ['btnCamera', 'btnDemo', 'btnUpload'].forEach((b) => {
-    $(`#${b}`).classList.toggle('active', b === id);
-    $(`#${b}`).setAttribute('aria-pressed', b === id);
+    $(`#${b}`).classList.toggle('active', b === selected);
+    $(`#${b}`).setAttribute('aria-pressed', b === selected);
   });
   document.body.classList.toggle('demo-running', id === 'btnDemo');
   $('.exam-start-quick')?.classList.toggle('primary', !!id);
   $('#three').inert = !id;
+  document.body.classList.toggle('source-inactive', app.source === 'off');
+  $('#sourceMenuButton').textContent = id === 'btnDemo' ? 'Demo' : id === 'btnUpload' ? 'Video' : 'Camera';
+  $('#sourceMenu').classList.remove('show');
+  $('#sourceMenuButton').setAttribute('aria-expanded', 'false');
 };
 function clearMotion() {
   app.live = null; app.report = null; app.calibrated = false; arc.clear();
@@ -289,7 +294,31 @@ function clearMotion() {
   $('#stage').classList.remove('has-motion');
   anatomy.setStress(Object.fromEntries(LOADS.map(([id]) => [id, 0])));
 }
-async function startCamera() {
+async function startCamera(options = {}) {
+  if (options.forCoach) {
+    const button = $('#coachCamera');
+    button.disabled = true;
+    $('#coachError')?.remove();
+    try {
+      await pose.init();
+      await pose.startCamera();
+      const report = app.report;
+      stopDemo();
+      app.report = report;
+      app.source = 'camera'; app.cameraError = false;
+      anatomy.setIdle(false); anatomy.setDemoMode(false);
+      $('#stage').classList.remove('source-off', 'camera-error', 'source-loading');
+      $('#camEmpty').classList.add('hide');
+      setSource('btnCamera');
+      return true;
+    } catch (e) {
+      const error = el('p', 'coach-error', esc(cameraErrorMessage(e)));
+      error.id = 'coachError'; error.setAttribute('role', 'alert');
+      $('#rehabCoach').append(error);
+      $('#coachTitle').focus({ preventScroll: true });
+      return false;
+    } finally { button.disabled = false; }
+  }
   stopDemo();
   stopCoach();
   app.cameraError = false; $('#cameraRecovery').hidden = true;
@@ -309,7 +338,6 @@ async function startCamera() {
     await pose.startCamera();
     app.source = 'camera';
     $('#btnMirror').classList.toggle('active', pose.mirrored);
-    $('#stageLegend').textContent = pose.mirrored ? 'Mirrored, like looking in a mirror' : 'Unmirrored camera view';
     $('#camEmpty').classList.add('hide');
     setSource('btnCamera');
     toast('Camera on. Stand about 2 m back, hips in frame');
@@ -321,6 +349,8 @@ async function startCamera() {
     $('#cameraRecovery').hidden = false;
     $('#cameraRecovery p').textContent = cameraErrorMessage(e);
     $('#stage').classList.add('camera-error');
+    anatomy.setIdle(true);
+    setSource('btnCamera');
   } finally { btn.disabled = false; $('#stage').classList.remove('source-loading'); }
 }
 async function loadVideo(file) {
@@ -362,12 +392,11 @@ function startDemo() {
   anatomy.setDemoMode(true);
   applyPreset('full');
   $('#readoutCaption span:last-child').textContent = 'Simulated values';
-  $('#stageLegend').textContent = 'Mirrored, like looking in a mirror';
   $('#camEmpty').classList.add('hide');
   const pill = $('#trackPill'); pill.classList.add('simulated'); pill.classList.remove('on', 'warn'); $('.txt', pill).textContent = 'DEMO · simulated motion';
   const total = DEMO.reduce((a, d) => a + d.dur, 0);
   const t0 = now();
-  let lastName = '';
+  let lastName = '', lastLoop = '';
   const loop = () => {
     if (app.source !== 'demo') return;
     if ($('.modal.show') || run.phase === 'safety' || $('#testCard').classList.contains('safety-card')) {
@@ -379,11 +408,13 @@ function startDemo() {
     for (const d of DEMO) { if (c < acc + d.dur) { seg = d; break; } acc += d.dur; }
     const activeTest = run.active && run.test && run.phase === 'measure';
     const a = activeTest ? demoTestPose(run.test, t - run.measureStart) || { elevation: 12, plane: 20, rotation: 0, elbowFlex: 6, hike: 0 } : seg.f((c - acc) / seg.dur);
+    const loopId = activeTest ? `${run.test.id}-${Math.floor((t - run.measureStart) / 3.6)}` : `${seg.name}-${Math.floor((t - t0) / total)}`;
+    if (loopId !== lastLoop) { arc.breakLine(t); lastLoop = loopId; }
     if (seg.name !== lastName) { lastName = seg.name; if (!run.active) $('#stageHud .hud-kicker').textContent = `Demo · ${seg.name}`; }
     const mk = (x) => ({ elevation: x.elevation, plane: x.plane, rotation: x.rotation, elbowFlex: x.elbowFlex, rotationValid: true, rotationSource: x.elbowFlex > 35 ? 'forearm' : 'hand', visibility: 1, neckGap: 0.2 * (1 - x.hike / 100) });
     const rest = activeTest ? { ...a, elevation: a.elevation + 1.5, rotation: a.rotation + 1 } : { ...a, elevation: Math.max(12, a.elevation - 6), rotation: a.rotation * .85, hike: a.hike * .5 };
-    const yaw = 25 * Math.sin(t * 0.6);
-    handleMetrics({ lean: 2 * Math.sin(t), torso: { yaw, hipYaw: yaw * 0.4, separation: yaw * 0.6, flex: 5, lean: 2 * Math.sin(t) }, sides: { [app.side]: mk(a), [other(app.side)]: mk(rest) } }, t);
+    const yaw = (activeTest || seg.name !== 'Serve motion' ? 4 : 12) * Math.sin(t * 0.6);
+    handleMetrics({ lean: 0, torso: { yaw, hipYaw: 0, separation: yaw, flex: 0, lean: 0 }, sides: { [app.side]: mk(a), [other(app.side)]: mk(rest) } }, t);
     demoRaf = requestAnimationFrame(loop);
   };
   loop();
@@ -444,7 +475,8 @@ async function ask(q, opts, { multi = false, speak = true, inCard = false } = {}
     host = $('#testQuestions');
     $('#testCard').classList.add('answering');
     host.replaceChildren(el('h4', '', q));
-    $$('.tc-actions button', $('#testCard')).forEach(b => b.disabled = true);
+    addMsg('doctor', md(q));
+    $$('.tc-actions button', $('#testCard')).forEach(b => b.disabled = b.textContent !== 'Skip');
     $('.tc-target', $('#testCard')).textContent = 'Answer above to continue.';
   } else host = $('.bubble', await doctor(q, { speak }));
   return new Promise((resolve) => {
@@ -487,6 +519,7 @@ async function ask(q, opts, { multi = false, speak = true, inCard = false } = {}
     if (inCard) host.closest('.tc-body').scrollTop = 0;
     else scrollChat();
     pending = {
+      cancel() { finished = true; pending = null; box.classList.add('done'); resolve(null); },
       answer(text) {
         const vopts = opts.map((o) => ({ label: o.label, kw: Array.isArray(o.kw) ? o.kw.join('|') : o.kw }));
         if (!multi) {
@@ -551,9 +584,7 @@ $('#btnMic').onclick = () => (stopListen ? stopListening() : startListening());
 
 function setVoice(on) {
   voice.setEnabled(on);
-  $('#btnVoiceToggle').classList.toggle('off', !on);
   $('#btnVoiceToggle').setAttribute('aria-pressed', on);
-  $('#btnVoiceToggle').setAttribute('aria-label', `Doctor voice: ${on ? 'on' : 'off'}`);
   $('#btnVoiceToggle').title = `Doctor voice: ${on ? 'on' : 'off'}`;
   if (!on) voice.cancel();
 }
@@ -567,7 +598,9 @@ function checkRedFlags() {
   if (f.length) {
     const order = { emergency: 0, urgent: 1, soon: 2 };
     f.sort((a, c) => order[a.level] - order[c.level]);
-    $('.rf-txt', b).textContent = f[0].text;
+    $('.rf-txt', b).innerHTML = f[0].level === 'emergency'
+      ? `<strong>Call emergency services now</strong><a href="tel:911">Call 911 / your local emergency number</a><span>${esc(f[0].text)}</span>`
+      : esc(f[0].text);
     b.dataset.level = f[0].level;
     renderRehab();
   }
@@ -582,7 +615,7 @@ function intakeProgress(step, total) {
   $('#progressIntakeLabel').textContent = `Intake ${step}/${total}`;
   $('#progressTestsLabel').textContent = 'Movement tests';
   $('#testCard').classList.add('show', 'intake');
-  $('#testCard').innerHTML = `<div class="tc-head"><div class="tc-step">${run.mode === 'quick' ? 'Quick' : 'Full'} exam · Question ${step} of ${total}</div><div class="tc-title">Getting to know your shoulder</div></div><div class="tc-progress"><i style="width:${Math.min(100, step / total * 100)}%"></i></div>`;
+  $('#testCard').innerHTML = `<div class="tc-head"><div class="tc-step">${run.mode === 'quick' ? 'Quick' : 'Full'} exam · Question ${step} of ${total}</div><div class="tc-title">${step === 1 ? 'Safety first' : 'Getting to know your shoulder'}</div></div>`;
 }
 async function blockForFlags(flags) {
   run.phase = 'safety';
@@ -590,27 +623,29 @@ async function blockForFlags(flags) {
   c.classList.remove('intake');
   c.classList.add('show', 'safety-card');
   $('#redFlagBanner').classList.remove('show');
-  const nextStep = flags.some(f => f.level === 'emergency')
-    ? 'Call your local emergency number now. Do not continue movement testing.'
+  const emergency = flags.some(f => f.level === 'emergency');
+  const nextStep = emergency
+    ? 'Call emergency services now'
     : 'Contact a clinician or urgent-care service before doing movement tests.';
-  c.innerHTML = `<div class="tc-head"><h2 class="tc-title">Get checked before testing.</h2></div><div class="tc-body">${flags.map(f => `<p>${esc(f.text)}</p>`).join('')}<p>${nextStep}</p></div><div class="tc-actions"><button class="btn primary" id="endUnsafeExam" type="button">End exam</button><button class="btn ghost" id="continueUnsafeExam" type="button">Continue anyway (not advised)</button></div>`;
-  c.scrollIntoView({ block: 'nearest' });
+  c.classList.toggle('emergency', emergency);
+  c.innerHTML = `<div class="tc-head"><h2 class="tc-title">${emergency ? nextStep : 'Get checked before testing.'}</h2>${emergency ? '<a class="emergency-call" href="tel:911">Call 911 / your local emergency number</a>' : ''}</div><div class="tc-body">${flags.map(f => `<p>${esc(f.text)}</p>`).join('')}${emergency ? '' : `<p>${nextStep}</p>`}</div><div class="tc-actions"><button class="btn primary" id="endUnsafeExam" type="button">End exam</button><button class="btn ghost" id="continueUnsafeExam" type="button">Continue anyway (not advised)</button></div>`;
+  if (matchMedia('(max-width: 700px)').matches) requestAnimationFrame(() => c.scrollIntoView({ block: 'start' }));
   return new Promise(resolve => {
     $('#endUnsafeExam').onclick = () => {
       exam.stoppedForSafety = true;
       run.active = false; run.phase = null;
       document.body.classList.remove('exam-running');
       $('#examProgress').hidden = true;
-      c.className = 'show saved-notice';
-      c.textContent = 'Exam stopped · Safety concern saved to History.';
+      c.className = `show saved-notice${emergency ? ' emergency' : ''}`;
+      c.innerHTML = `${emergency ? '<strong>Call emergency services now</strong><a href="tel:911">Call 911 / your local emergency number</a>' : 'Exam stopped'} · Safety concern saved to History.`;
       const report = app.report = currentReport();
       saveHistory(report);
-      doctor('Exam stopped. Please contact a clinician before testing. Your safety concern has been saved to History.', { speak: false, delay: 100 })
+      doctor(`${emergency ? 'Call emergency services now. Do not continue movement testing.' : 'Exam stopped. Please contact a clinician before testing.'} Your safety concern has been saved to History.`, { speak: false, delay: 100 })
         .then(m => completionActions($('.bubble', m), true));
       resolve(false);
     };
     $('#continueUnsafeExam').onclick = () => {
-      run.phase = 'intake'; c.classList.remove('safety-card');
+      run.phase = 'intake'; c.classList.remove('safety-card', 'emergency');
       resolve(true);
     };
   });
@@ -701,14 +736,14 @@ function renderCard(t, i, n) {
   c.innerHTML = '';
   const head = el('div', 'tc-head');
   head.append(el('div', 'tc-step', `Test ${i + 1} of ${n}`), el('div', 'tc-title', esc(t.title)));
-  c.classList.remove('intake', 'safety-card', 'answering');
+  c.classList.remove('intake', 'safety-card', 'answering', 'emergency');
   head.firstElementChild.textContent = `${run.mode === 'quick' ? 'Quick' : 'Full'} exam · Test ${i + 1} of ${n}`;
-  if (t.id === 'rot90') head.lastElementChild.innerHTML = 'Rotation range (GIRD) <span class="help" tabindex="0" title="GIRD means less inward rotation on one side compared with the other." aria-label="GIRD means less inward rotation on one side compared with the other.">ⓘ</span>';
+  if (t.id === 'rot90') head.lastElementChild.innerHTML = 'Rotation range <span class="help" tabindex="0" title="GIRD means less inward rotation on one side compared with the other." aria-label="GIRD means less inward rotation on one side compared with the other.">ⓘ</span>';
   c.append(head);
   const body = el('div', 'tc-body');
   const focusLabel = $(`#presets [data-preset="${t.focus}"]`)?.textContent.toLowerCase() || t.focus;
   body.append(el('div', 'tc-focus', t.focus === 'full' ? 'Showing: all tissue' : `Highlighting: ${esc(focusLabel)}`));
-  if (t.tip) body.append(el('p', 'tc-desc', md(t.tip)));
+  if (t.tip && app.source !== 'demo') body.append(el('p', 'tc-desc', md(t.tip)));
   const ol = el('ol', 'tc-steps');
   const steps = app.source === 'demo' && t.id === 'calib'
     ? ['Watch the shoulders rest at their sides', 'Simulated calibration runs automatically', 'No camera is being used']
@@ -717,7 +752,6 @@ function renderCard(t, i, n) {
   body.append(ol);
   const questions = el('div'); questions.id = 'testQuestions'; body.append(questions);
   c.append(body);
-  const prog = el('div', 'tc-progress'); prog.append(el('i')); head.after(prog);
   c.append(el('div', 'tc-target', ''));
   const acts = el('div', 'tc-actions');
   const b = (label, cls, fn) => { const x = el('button', `btn ${cls}`, label); x.type = 'button'; x.onclick = fn; acts.append(x); return x; };
@@ -726,14 +760,16 @@ function renderCard(t, i, n) {
   const next = b('Next', 'primary', () => runCommand('next'));
   next.id = 'testNext';
   if (app.source === 'demo' && !demoTestPose(t, 0)) {
-    body.append(el('p', 'demo-unavailable', "Demo can't perform this test. Press Next"));
+    body.append(el('p', 'demo-unavailable', 'This requires hands-on contact. Demo will skip it automatically.'));
+  } else if (app.source === 'demo' && t.mode === 'manual') {
+    body.append(el('p', 'demo-unavailable', 'Illustrated demo movement · advances automatically'));
   }
   c.append(acts);
   c.classList.add('show');
 }
 function cardProgress(frac, html) {
   const c = $('#testCard');
-  const i = $('.tc-progress > i', c); if (i) i.style.width = `${Math.round(clamp(frac, 0, 1) * 100)}%`;
+  $('#progressTests').style.width = `${(run.idx + clamp(frac, 0, 1)) / Math.max(1, run.list.length) * 100}%`;
   const tg = $('.tc-target', c); if (tg && html != null && tg.innerHTML !== html) tg.innerHTML = html;
   const lis = $$('ol.tc-steps li', c);
   const cur = Math.min(lis.length - 1, Math.floor(clamp(frac, 0, 0.999) * lis.length));
@@ -749,7 +785,18 @@ function setHold(p, text, show = true) {
 function examTick(live) {
   if ($('.modal.show') || !run.active || !run.test || run.phase !== 'measure') return;
   const t = run.test, rec = run.rec, sides = readSides(t);
-  if (t.mode === 'manual') { accStats(rec, live, sides); return; }
+  if (t.mode === 'manual') {
+    accStats(rec, live, sides);
+    if (app.source === 'demo') {
+      const duration = { obrien: 10, scapClick: 16 }[t.id] || 6;
+      cardProgress((live.t - run.measureStart) / duration, 'Illustrated demo · watch the movement');
+      if (live.t - run.measureStart >= duration) {
+        if (demoTestPose(t, 0)) advance();
+        else { system(`Demo skipped ${t.title}: this needs hands-on assessment.`); runCommand('skip'); }
+      }
+    }
+    return;
+  }
   if (t.mode === 'hold') return holdTick(t, rec, live, sides);
   return repTick(t, rec, live, sides);
 }
@@ -864,7 +911,7 @@ async function runTest(t, i, n) {
   run.counter = t.rep ? new RepCounter({ up: t.rep.up, down: t.rep.down }) : null;
   run.hold = { start: null, samples: { L: [], R: [] } };
   run.passSide = t.sides === 'affectedFirst' ? app.side : null;
-  applyPreset(t.focus, { frame: app.source !== 'demo' });
+  applyPreset(t.focus, { frame: false });
   renderCard(t, i, n);
   $('#hudTitle').textContent = t.title;
   $('#hudSub').textContent = t.steps[0].replace(/\*\*/g, '');
@@ -882,15 +929,17 @@ async function runTest(t, i, n) {
   cardProgress(1, 'Done ✓');
   for (const f of t.follow || []) {
     const answer = await ask(f.q, f.opts, { multi: !!f.multi, inCard: true });
+    if (answer == null) { run.rec.skipped = true; return; }
     run.rec.follow[f.id] = answer;
     const painMarker = run.rec.markers.find(m => m.type === 'pain');
     const deniesPain = (Array.isArray(answer) ? answer.includes('none') : ['none', 'na'].includes(answer))
-      && ['pain', 'thumbDown', 'palmUp', 'cock', 'feel'].includes(f.id);
+      && ['pain', 'arc', 'thumbDown', 'palmUp', 'cock', 'feel'].includes(f.id);
     if (painMarker && deniesPain) {
-      const confirm = await ask(`You marked pain at ${fmt(painMarker.elevation)}° — confirm?`, [
-        { v: 'keep', label: 'Keep pain marker' }, { v: 'remove', label: 'Pressed by mistake — remove it' },
+      const confirm = await ask(`You marked pain at ${fmt(painMarker.elevation)}°. Was that painful?`, [
+        { v: 'keep', label: 'Yes, that was painful' }, { v: 'remove', label: 'No — remove the pain marker' },
       ], { inCard: true });
-      if (confirm === 'remove') run.rec.markers = run.rec.markers.filter(m => m.type !== 'pain');
+      if (confirm == null) { run.rec.skipped = true; return; }
+      reconcilePain(run.rec, f.id, confirm === 'keep', f);
     }
   }
   run.rec.complete = true;
@@ -905,6 +954,7 @@ async function startExam(mode = run.mode) {
   run.test = null; run.rec = null; run.phase = 'intake';
   run.list = [];
   exam.startedT = now(); exam.freeMarkers = [];
+  $('#btnReport').disabled = false;
   document.body.classList.remove('exam-testing');
   layoutMobileStage();
   $$('#chatLog .opts').forEach(box => box.classList.add('done'));
@@ -915,14 +965,14 @@ async function startExam(mode = run.mode) {
   run.active = true;
   document.body.classList.add('exam-running');
   $('#redFlagBanner').classList.remove('show');
-  $('#testCard').classList.remove('safety-card');
+  $('#testCard').classList.remove('safety-card', 'emergency', 'saved-notice', 'answering');
   renderRehab();
   const ok = await runIntake();
   if (!ok) { run.active = false; return; }
   const list = buildList(mode);
   run.list = list;
   await doctor(`${list.length} movement tests next. Move gently and stop if symptoms worsen. Use the marker buttons to note what you feel.`, { delay: 150 });
-  if (!stopListen && voice.sttSupported) system('Tip: tap the 🎤 mic to answer and mark events hands-free.');
+  system('Tip: press P to mark pain, C for a click, L for pulling, or U for instability.');
   for (let i = 0; i < list.length; i++) {
     if (!run.active) return;
     run.idx = i;
@@ -946,15 +996,25 @@ function finishExam() {
   saveHistory(report);
   renderRehab(report);
   const top = report.conditions?.[0];
-  const conclusion = top?.p >= .35 ? `Leading finding: **${top.name}**.` : 'No strong screening pattern was found.';
+  const conclusion = report.flags?.length ? report.summary : top?.p >= .35 ? `Leading finding: **${top.name}**.` : 'No strong screening pattern was found.';
   doctor(`Screening saved. ${conclusion}`, { delay: 100 }).then(m => completionActions($('.bubble', m)));
 }
 function completionActions(host, stopped = false) {
   const actions = el('div', 'opts completion-actions');
-  const choices = stopped ? [['Start over', () => startExam('quick')], ['View report', openReport]]
-    : [['View report', openReport], ['Start new exam', () => startExam('quick')], ['Go to Rehab', () => switchTab('rehab')]];
+  const choices = stopped ? [['Start over', chooseExam], ['View report', () => openReport()]]
+    : [['View report', () => openReport()], ['Start new exam', chooseExam], ['Go to Rehab', () => switchTab('rehab')]];
   for (const [label, action] of choices) {
     const b = el('button', 'opt', label); b.type = 'button'; b.onclick = () => action(); actions.append(b);
+  }
+  function chooseExam() {
+    chatLog.append(el('hr', 'exam-divider'));
+    addMsg('doctor', 'Which exam would you like to run?');
+    const box = el('div', 'opts');
+    for (const [label, mode] of [['Quick exam · 4–6 min', 'quick'], ['Full exam · 12–15 min', 'full']]) {
+      const b = el('button', 'opt', label); b.type = 'button';
+      b.onclick = () => { box.classList.add('done'); startExam(mode); }; box.append(b);
+    }
+    $('.bubble', chatLog.lastElementChild).append(box); scrollChat();
   }
   host.append(actions); scrollChat();
 }
@@ -968,7 +1028,7 @@ function runCommand(cmd) {
   }
   if (!run.active) return;
   if (cmd === 'next' || cmd === 'skip' || cmd === 'repeat') {
-    if (pending) return;
+    if (pending) { if (cmd === 'skip') pending.cancel(); return; }
     if (run.phase === 'measure' || run.phase === 'paused') { run.phase = 'follow'; const r = run.resolve; run.resolve = null; r?.(cmd === 'next' ? 'done' : cmd); }
     else if (cmd === 'repeat' && run.test) voice.speak(run.test.say, { interrupt: true });
   }
@@ -985,7 +1045,7 @@ function addMarker(type, src = 'you') {
   arc.mark(type, app.live?.t ?? now());
   const btn = $(`#markerBar button[data-marker="${type}"]`);
   if (btn) { btn.classList.add('active'); setTimeout(() => btn.classList.remove('active'), 600); }
-  toast(`${app.side} ${MARK_LABEL[type]} recorded${sm ? ` at ${displayedAngle}` : ''}${src === 'mic' ? ' (heard by mic)' : ''}`, type === 'pain' || type === 'unstable' ? 'warn' : '');
+  toast(`${SIDE_NAME[app.side]} shoulder: ${MARK_LABEL[type].toLowerCase()} recorded${sm ? ` at ${displayedAngle}` : ''}${src === 'mic' ? ' (heard by mic)' : ''}`, type === 'pain' || type === 'unstable' ? 'warn' : '');
 }
 $$('#markerBar button[data-marker]').forEach((b) => (b.onclick = () => addMarker(b.dataset.marker)));
 document.addEventListener('keydown', (e) => {
@@ -1007,8 +1067,11 @@ document.addEventListener('keydown', (e) => {
 let pop = null;
 $('#btnPopMic').onclick = async () => {
   const b = $('#btnPopMic');
-  if (pop) { pop.stop(); pop = null; b.classList.remove('on'); b.setAttribute('aria-pressed', false); $('#popLevel').style.width = '0%'; return; }
-  if (!audioSupported) { toast('Microphone audio not supported in this browser', 'warn'); return; }
+  if (pop) { pop.stop(); pop = null; b.classList.remove('on'); b.setAttribute('aria-pressed', false); $('#popLevel').style.width = '0%'; $('#popStatus').textContent = 'Click detector off'; return; }
+  $('#popStatus').textContent = '';
+  if (!audioSupported) { $('#popStatus').textContent = 'Mic unavailable'; return; }
+  b.disabled = true;
+  $('#popStatus').textContent = 'Allow microphone access in your browser…';
   try {
     pop = new PopDetector({ sensitivity: 0.6 });
     pop.onLevel((lv) => { $('#popLevel').style.width = `${Math.round(clamp(lv, 0, 1) * 100)}%`; pop?.setSuppressed(voice.speaking); });
@@ -1016,26 +1079,31 @@ $('#btnPopMic').onclick = async () => {
     await pop.start();
     b.classList.add('on');
     b.setAttribute('aria-pressed', true);
-    toast('Click mic on. Hold the phone or laptop mic near your shoulder in a quiet room');
-  } catch (e) { pop = null; toast(`Mic unavailable: ${e.message || e}`, 'warn'); }
+    $('#popStatus').textContent = 'Click detector on';
+  } catch (e) { pop?.stop(); pop = null; b.classList.remove('on'); b.setAttribute('aria-pressed', false); $('#popStatus').textContent = 'Mic unavailable'; }
+  finally { b.disabled = false; }
 };
 
 /* ---------------- report ---------------- */
 function currentReport() {
   const total = (run.list.length ? run.list : buildList(run.mode)).length;
   const completed = Object.values(exam.tests).filter(t => t.complete && !t.skipped).length;
-  const report = displayReport({ ...buildReport(exam), stoppedForSafety: !!exam.stoppedForSafety }, { completed, total, simulated: app.source === 'demo' || Object.values(exam.tests).some(t => t.simulated) });
+  const report = displayReport({ ...buildReport(exam), stoppedForSafety: !!exam.stoppedForSafety, nerveReferral: exam.intake.nerve === 'yes' }, { completed, total, simulated: app.source === 'demo' || Object.values(exam.tests).some(t => t.simulated) });
   report.markers = collectMarkers(exam);
   if (!exam.intake.side && report.flags?.length) report.side = null;
   if (exam.intake.overheadSport !== 'yes') report.serve = [];
   return report;
 }
+let reportReturnFocus = null, reportReturnHistory = false;
 function openReport(report) {
+  reportReturnFocus = document.activeElement;
+  reportReturnHistory = !!reportReturnFocus?.closest('#historyModal');
+  $('#reportSafety').replaceChildren();
   const card = $('#reportModal .modal-card');
   card.scrollTop = 0;
   $('#reportBody').scrollTop = 0;
   if (!report && Object.keys(exam.intake).length) report = app.report = currentReport();
-  report ||= app.report;
+  report ||= app.report || loadHistory()[0]?.report;
   if (!report) {
     $('#reportBody').innerHTML = '<div class="report"><h3>Your report starts with an exam</h3><p>Complete a guided screening to see your movement findings, the evidence for possible causes, and a personalized rehab plan.</p><p class="rp-muted">No findings yet. Demo motion is simulated, not a clinical measurement.</p><button class="btn primary" id="reportStartExam" type="button">Start quick exam</button><p class="rp-foot">Screening aid, not a diagnosis. Seek care promptly for sudden weakness, numbness, deformity after injury, or persistent night pain.</p></div>';
     $('#reportMeta').textContent = 'No exam completed · Screening aid, not a diagnosis';
@@ -1045,14 +1113,15 @@ function openReport(report) {
     return;
   }
   renderReport($('#reportBody'), report);
+  if (report.flags?.length) $('#reportSafety').append($('#reportBody .rp-flags'));
+  $('#reportTitle').textContent = report.flags?.some(f => f.level === 'emergency') ? 'Call emergency services now' : 'Your shoulder';
   app.report = report;
   $$('#reportBody .coach-btn').forEach(b => {
     b.disabled = run.active;
     b.title = run.active ? 'Finish or pause the exam first.' : 'Start the live rep coach';
   });
   $('#btnPrint').disabled = false; $('#btnExport').disabled = false;
-  const d = new Date(report.generatedAt || Date.now());
-  $('#reportMeta').textContent = `${report.side ? `${SIDE_NAME[report.side]} shoulder · ` : ''}${d.toLocaleString()} · Screening aid, not a diagnosis`;
+  $('#reportMeta').textContent = `Shoulder Scan · ${report.side ? `${SIDE_NAME[report.side]} shoulder · ` : ''}${reportDate(report.generatedAt)} · Screening aid, not a diagnosis`;
   $('#reportModal').classList.add('show');
   requestAnimationFrame(() => { card.scrollTop = 0; $('#reportTitle').focus(); });
 }
@@ -1087,16 +1156,20 @@ for (const modal of $$('.modal')) {
   new MutationObserver(() => {
     if (modal.classList.contains('show')) {
       modal.inert = false; modal.setAttribute('aria-hidden', 'false');
-      returnFocus = modal.id === 'reportModal' ? $('#btnReport') : $('#btnHistory');
+      returnFocus = modal.id === 'reportModal' ? reportReturnFocus || $('#btnReport') : $('#btnHistory');
       modal.querySelector('button:not(:disabled)')?.focus({ preventScroll: true });
-    } else { modal.inert = true; modal.setAttribute('aria-hidden', 'true'); returnFocus?.focus({ preventScroll: true }); }
+    } else {
+      modal.inert = true; modal.setAttribute('aria-hidden', 'true');
+      if (modal.id === 'reportModal' && reportReturnHistory) $('#historyModal').classList.add('show');
+      requestAnimationFrame(() => { (returnFocus?.getClientRects().length ? returnFocus : modal.id === 'reportModal' ? $('#btnReport') : $('#btnHistory'))?.focus({ preventScroll: true }); });
+    }
     updateModalPause();
   }).observe(modal, { attributes: true, attributeFilter: ['class'] });
   modal.addEventListener('keydown', (e) => {
     if (e.key !== 'Tab') return;
     const nodes = [...modal.querySelectorAll('button:not(:disabled), a[href], summary, input')].filter((n) => n.getClientRects().length);
     const first = nodes[0], last = nodes.at(-1);
-    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+    if (e.shiftKey && (document.activeElement === first || !nodes.includes(document.activeElement))) { e.preventDefault(); last?.focus(); }
     if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
   });
 }
@@ -1108,7 +1181,8 @@ function renderRehab(report = app.report) {
   list.innerHTML = '';
   if (redFlags(exam).length || report?.flags?.length) {
     $('#rehabCoach').replaceChildren();
-    list.append(el('p', 'rehab-paused', 'Exercises paused until a clinician clears you.'));
+    list.append(el('p', 'rehab-paused', `Exercises are paused because ${esc((redFlags(exam)[0] || report.flags[0]).text)} A clinician must clear you before movement testing or exercise.`));
+    const link = el('button', 'btn', 'View safety report'); link.type = 'button'; link.onclick = () => openReport(report || currentReport()); list.append(link);
     return;
   }
   const plan = report?.plan?.length ? report.plan : [1, 2, 3].map((p) => ({
@@ -1116,6 +1190,7 @@ function renderRehab(report = app.report) {
     items: Object.entries(EXERCISES).filter(([, e]) => e.phase === p).map(([id, e]) => ({ id, ...e })),
   }));
   if (!report) list.append(el('p', 'tc-desc', 'Default plan. Run the exam to personalize it.'));
+  else if ((report.conditions?.[0]?.p || 0) < .35) list.append(el('p', 'general-plan', 'General movement plan · no strong screening pattern. This is not a personalized treatment plan.'));
   if (app.source === 'demo' || report?.completion?.simulated) list.append(el('p', 'tc-desc', 'Demo plan preview. Simulated results are not treatment advice.'));
   for (const ph of plan) {
     list.append(el('div', 'phase-h', esc(phaseTitle(ph))));
@@ -1142,8 +1217,13 @@ function startCoach(key, exId) {
   const box = $('#rehabCoach');
   $('#rehabView').scrollTop = 0;
   if (app.source !== 'camera') {
+    if (app.source !== 'demo') {
+      const report = app.report;
+      startDemo();
+      app.report = report;
+    }
     box.innerHTML = `<h4 id="coachTitle" tabindex="-1">Coach: ${esc(EXERCISES[exId]?.name || cfg.name)} needs the camera</h4><div class="tc-actions"><button class="btn primary" id="coachCamera" type="button">Start camera</button><button class="btn ghost" id="coachBack" type="button">Back</button></div>`;
-    $('#coachCamera').onclick = async () => { await startCamera(); if (app.source === 'camera') startCoach(key, exId); };
+    $('#coachCamera').onclick = async () => { if (await startCamera({ forCoach: true })) startCoach(key, exId); };
     $('#coachBack').onclick = () => { box.replaceChildren(); $('.coach-start')?.focus(); };
     box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     $('#coachTitle').focus({ preventScroll: true });
@@ -1236,13 +1316,19 @@ function saveHistory(report) {
   try { localStorage.setItem(HKEY, JSON.stringify(h.slice(0, 20))); localStorage.removeItem(DKEY); } catch (e) { console.warn(e); }
 }
 function saveDraft() { try { localStorage.setItem(DKEY, JSON.stringify(exam)); } catch {} }
-$('#btnHistory').onclick = () => {
+function showHistory() {
   const body = $('#historyBody'); body.innerHTML = '';
-  for (const h of loadHistory()) {
-    const b = el('button', 'hist-item', `<div><b>${esc(reportHeadline(h.report))}</b></div><div class="date">${new Date(h.at).toLocaleString()}${h.side ? ` · ${SIDE_NAME[h.side]} shoulder` : ''}</div>`);
+  const history = loadHistory();
+  for (const [index, h] of history.entries()) {
+    const row = el('div', 'hist-row');
+    const b = el('button', 'hist-item', `<div><b>${esc(reportHeadline(h.report))}</b></div><div class="date">${reportDate(h.at)}${h.side ? ` · ${SIDE_NAME[h.side]} shoulder` : ''}</div>`);
     b.type = 'button';
     b.onclick = () => { $('#historyModal').classList.remove('show'); app.report = h.report; renderRehab(h.report); openReport(h.report); };
-    body.append(b);
+    const remove = el('button', 'btn ghost', 'Delete'); remove.type = 'button';
+    remove.onclick = () => confirmHistoryDelete(() => {
+      history.splice(index, 1); localStorage.setItem(HKEY, JSON.stringify(history)); showHistory();
+    }, 'Delete this saved session?');
+    row.append(b, remove); body.append(row);
   }
   if (!body.firstChild) {
     body.append(el('p', 'tc-desc', run.active ? 'Your exam is in progress. Resume it to complete a report.' : 'No saved sessions yet. Start an exam to keep a report here.'));
@@ -1251,8 +1337,21 @@ $('#btnHistory').onclick = () => {
     start.onclick = () => { $('#historyModal').classList.remove('show'); if (run.active) switchTab('exam'); else startExam('quick'); };
     body.append(start);
   }
+  if (history.length) {
+    const clear = el('button', 'btn ghost', 'Clear all sessions'); clear.type = 'button';
+    clear.onclick = () => confirmHistoryDelete(() => { localStorage.removeItem(HKEY); showHistory(); }, 'Delete all saved sessions? This cannot be undone.');
+    body.append(clear);
+  }
   $('#historyModal').classList.add('show');
-};
+}
+function confirmHistoryDelete(remove, message) {
+  $('#historyConfirm')?.remove();
+  const box = el('div', 'history-confirm', `<p>${message}</p>`); box.id = 'historyConfirm'; box.setAttribute('role', 'alert');
+  const yes = el('button', 'btn primary', 'Delete'), no = el('button', 'btn', 'Cancel');
+  yes.type = no.type = 'button'; yes.onclick = remove; no.onclick = () => box.remove();
+  box.append(yes, no); $('#historyBody').prepend(box); no.focus();
+}
+$('#btnHistory').onclick = showHistory;
 $('#btnCloseHistory').onclick = () => $('#historyModal').classList.remove('show');
 
 /* ---------------- toolbar ---------------- */
@@ -1263,6 +1362,10 @@ $('#welcomeCamera').onclick = $('#retryCamera').onclick = startCamera;
 $('#welcomeDemo').onclick = $('#recoverDemo').onclick = startDemo;
 $('#welcomeVideo').onclick = () => $('#fileVideo').click();
 $('#mobileQuick').onclick = () => startExam('quick');
+$('#sourceMenuButton').onclick = () => {
+  const open = $('#sourceMenu').classList.toggle('show');
+  $('#sourceMenuButton').setAttribute('aria-expanded', open);
+};
 $('.source').addEventListener('keydown', e => {
   if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
   const buttons = $$('.source button');
@@ -1272,9 +1375,10 @@ $('.source').addEventListener('keydown', e => {
 });
 document.addEventListener('pointerdown', e => {
   if (!$('#anatomyControls').contains(e.target)) $('#anatomyControls').open = false;
+  if (!e.target.closest('#sourceMenu, #sourceMenuButton')) { $('#sourceMenu').classList.remove('show'); $('#sourceMenuButton').setAttribute('aria-expanded', 'false'); }
 });
 $('#fileVideo').onchange = (e) => { const f = e.target.files?.[0]; if (f) loadVideo(f); e.target.value = ''; };
-$('#btnMirror').onclick = () => { pose.setMirror(!pose.mirrored); $('#btnMirror').classList.toggle('active', pose.mirrored); $('#stageLegend').textContent = pose.mirrored ? 'Mirrored, like looking in a mirror' : 'Unmirrored camera view'; };
+$('#btnMirror').onclick = () => { pose.setMirror(!pose.mirrored); $('#btnMirror').classList.toggle('active', pose.mirrored); };
 $('#btnCapture').onclick = () => {
   const dl = (url, name) => { if (!url) return; const a = document.createElement('a'); a.href = url; a.download = name; a.click(); };
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -1284,15 +1388,17 @@ $('#btnCapture').onclick = () => {
 };
 function boundAnatomyPanel() {
   if (!$('#anatomyControls').open) return;
-  const top = $('#leftPanel').getBoundingClientRect().top;
-  const bottom = $('#stage').contains($('#readoutStrip')) && $('#readoutStrip').getClientRects().length ? $('#readoutStrip').getBoundingClientRect().top : $('#dock').getBoundingClientRect().top;
-  $('#leftPanel').style.maxHeight = `${Math.max(80, bottom - top - 12)}px`;
+  const stage = $('#stage').getBoundingClientRect();
+  $('#leftPanel').style.setProperty('--panel-top', `${Math.max(12, stage.top + 60)}px`);
+  $('#leftPanel').style.setProperty('--panel-right', `${Math.max(12, innerWidth - stage.right + 12)}px`);
 }
-$('#anatomyControls').addEventListener('toggle', boundAnatomyPanel);
+$('#anatomyControls').addEventListener('toggle', () => { boundAnatomyPanel(); anatomy.setPanelOpen($('#anatomyControls').open); });
 function layoutMobileStage() {
-  const mobile = matchMedia('(max-width: 700px)').matches && document.body.classList.contains('exam-testing');
+  const mobile = matchMedia('(max-width: 700px)').matches;
   const target = mobile ? $('#mobileReadouts') : $('#stage');
   if ($('#readoutStrip').parentElement !== target) target.append($('#readoutStrip'));
+  const chartTarget = mobile ? $('#mobileReadouts') : $('#dock');
+  if ($('#arcWrap').parentElement !== chartTarget) chartTarget.append($('#arcWrap'));
 }
 addEventListener('resize', () => { layoutMobileStage(); anatomy.resize(); positionToast(); boundAnatomyPanel(); });
 addEventListener('scroll', positionToast, { passive: true });
@@ -1301,6 +1407,9 @@ addEventListener('beforeunload', () => { pop?.stop(); pose.stop(); });
 /* ---------------- init ---------------- */
 buildLeftPanel();
 buildMeasure();
+$$('#markerBar button').forEach(b => b.insertAdjacentHTML('afterbegin', markerIcon(b.dataset.marker)));
+$('#btnReport').disabled = loadHistory().length === 0;
+layoutMobileStage();
 setSide('R');
 applyPreset('full');
 switchTab('exam');

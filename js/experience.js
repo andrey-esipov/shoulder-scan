@@ -43,14 +43,40 @@ export const formatValue = (value, digits = 0) => {
   const rounded = Number(value).toFixed(digits);
   return Number(rounded) === 0 ? (0).toFixed(digits) : rounded.replace('-', '−');
 };
+export const reportDate = value => new Date(value || Date.now()).toLocaleString(undefined, {
+  year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+});
+
+export function reconcilePain(record, field, painful, question = {}) {
+  if (!painful) record.markers = record.markers.filter(m => m.type !== 'pain');
+  else if (field === 'arc') {
+    const angle = record.markers.find(m => m.type === 'pain')?.elevation;
+    record.follow.arc = angle >= 145 ? 'top' : angle >= 55 ? 'middle' : 'whole';
+  } else {
+    const choices = question.opts?.map(o => o.v) || ['other'];
+    const value = ['pain', 'other'].find(v => choices.includes(v));
+    if (value) record.follow[field] = question.multi ? [value] : value;
+    else delete record.follow[field];
+  }
+}
 
 export function demoTestPose(test, elapsed) {
-  if (!test || test.mode === 'manual') return null;
+  if (!test) return null;
+  if (test.mode === 'manual') {
+    const wave = (1 - Math.cos(elapsed * Math.PI / 2)) / 2;
+    const clips = {
+      hawkins: { elevation: 90, plane: 90, rotation: -40 * wave, elbowFlex: 90, hike: 0 },
+      obrien: { elevation: 90, plane: 105, rotation: elapsed % 10 < 5 ? -35 : 35, elbowFlex: 8, hike: 0 },
+      crossBody: { elevation: 90, plane: 105 + 15 * wave, rotation: 0, elbowFlex: 30, hike: 0 },
+      scapClick: { elevation: elapsed < 5 ? 12 : 12 + 158 * wave, plane: 30, rotation: 15, elbowFlex: 8, hike: elapsed < 5 ? 12 * wave : 2 },
+    };
+    return clips[test.id] || null;
+  }
   const gate = test.target || test.rep;
   const midpoint = range => (range[0] + range[1]) / 2;
   const pose = {
     elevation: gate.elevRange ? midpoint(gate.elevRange) : gate.elevMax != null ? 12 : 90,
-    plane: gate.plane ? midpoint(gate.plane) : 20,
+    plane: gate.plane ? midpoint(gate.plane) : 15,
     rotation: 0, elbowFlex: gate.metric === 'rotation' ? 90 : 6, hike: 0,
   };
   if (test.mode === 'hold') {
@@ -70,6 +96,7 @@ export function displayReport(report, completion) {
   const lead = report.conditions?.[0];
   return {
     ...report, completion,
-    summary: report.stoppedForSafety ? 'Exam stopped. Please contact a clinician before testing.' : `${lead?.p >= .35 ? `The leading screening finding is **${lead.name}**.` : 'No strong screening pattern was found.'} ${completion.completed < completion.total ? 'Finish the remaining tests before drawing conclusions. ' : ''}The findings below show the supporting and conflicting evidence. A clinician can assess the cause and help choose a safe, gradual return to activity.`,
+    summary: report.flags?.some(f => f.level === 'emergency') ? 'Call emergency services now. Do not continue movement testing.'
+      : `${report.nerveReferral ? 'Ask a clinician about your neck / nerves. Arrange an assessment for numbness, tingling or pain past the elbow. ' : ''}${report.stoppedForSafety ? 'Exam stopped. Please contact a clinician before testing.' : report.flags?.length ? 'Get checked before testing. A safety concern needs clinical assessment.' : `${lead?.p >= .35 ? `The leading screening finding is **${lead.name}**.` : 'No strong screening pattern was found.'} ${completion.completed < completion.total ? 'Finish the remaining tests before drawing conclusions. ' : ''}The findings below show the supporting and conflicting evidence. A clinician can assess the cause and help choose a safe, gradual return to activity.`}`,
   };
 }

@@ -1,4 +1,4 @@
-// Fit the shoulders, upper arms and torso rather than the full fingertip span.
+// Fit the torso, arms and full fingertip span inside the unobstructed stage.
 export function fitAnatomyBounds(bounds, aspect, fov = 36) {
   const target = ['x', 'y', 'z'].map((axis) => (bounds.min[axis] + bounds.max[axis]) / 2);
   const halfWidth = (bounds.max.x - bounds.min.x) / 2;

@@ -88,15 +88,15 @@ export const TESTS = [
   },
   {
     id: 'flex', title: 'Forward raise', mode: 'reps', reps: 3, sides: 'both', focus: 'muscles',
-    say: 'Raise both arms straight forward and up as high as you can, then lower them slowly. Do three. Say "pain" or "click" the moment you feel either one.',
+    say: 'Raise both arms straight forward and up as high as you can, then lower them slowly. Do three. Press P for pain or C for a click the moment you feel either one.',
     steps: ['Thumbs up, elbows straight', 'Raise forward all the way overhead', 'Lower slowly (3 seconds)', 'Do 3 reps'],
     rep: { metric: 'elevation', up: 120, down: 40, plane: [50, 130] },
     follow: [{ id: 'pain', q: 'Did any part of that hurt?', opts: PAIN_LOC, multi: true }],
   },
   {
     id: 'abd', title: 'Side raise: painful-arc check', mode: 'reps', reps: 3, sides: 'both', focus: 'cuff',
-    say: 'Now raise both arms out to the sides, thumbs pointing up, all the way overhead, then lower slowly. Do three. Say "pain" exactly when it starts hurting and again when it stops.',
-    steps: ['Arms out to the sides, thumbs up', 'Raise all the way overhead', 'Lower slowly. The way down matters most', 'Say "pain" when it starts and when it stops'],
+    say: 'Now raise both arms out to the sides, thumbs pointing up, all the way overhead, then lower slowly. Do three. Press P exactly when it starts hurting and again when it stops.',
+    steps: ['Arms out to the sides, thumbs up', 'Raise all the way overhead', 'Lower slowly. The way down matters most', 'Press P when pain starts and when it stops'],
     rep: { metric: 'elevation', up: 120, down: 40, plane: [-15, 55] },
     follow: [{ id: 'arc', q: 'Where in the movement did it hurt?', opts: [
       { v: 'none', label: 'No pain', kw: ['no', 'none'] },
@@ -113,10 +113,10 @@ export const TESTS = [
     follow: [{ id: 'pain', q: 'Any pain?', opts: PAIN_LOC, multi: true }],
   },
   {
-    id: 'rot90', title: '90/90 rotation and GIRD check', mode: 'reps', reps: 3, sides: 'affectedFirst', focus: 'labrum',
+    id: 'rot90', title: 'Rotation range', mode: 'reps', reps: 3, sides: 'affectedFirst', focus: 'labrum',
     say: 'This one matters for your serve. Raise the arm out to shoulder height with the elbow bent ninety degrees, like a goalpost. Rotate the hand back as far as is comfortable, then forward and down as far as it goes. Do the sore arm first, then the other one. Stop if it feels unstable.',
     steps: ['Goalpost position: elbow at shoulder height, bent 90°', 'Rotate hand UP and back (external rotation)', 'Then rotate DOWN and forward (internal rotation)', 'Keep the shoulder blade still: no shrugging', '3 reps each arm. Sore arm first'],
-    tip: 'Turn 45° to the camera for a better read on rotation.',
+    tip: 'Turn 45° to the camera for a better read on rotation. GIRD means less inward rotation on one side compared with the other.',
     rep: { metric: 'rotation', up: 60, down: -10, elevRange: [65, 115] },
     follow: [{ id: 'cock', q: 'With the hand back (cocked position), what did you feel?', opts: [
       { v: 'none', label: 'Nothing', kw: ['nothing', 'no', 'fine'] },
@@ -128,14 +128,14 @@ export const TESTS = [
   },
   {
     id: 'hawkins', title: 'Hawkins impingement test', mode: 'manual', sides: 'affected', focus: 'cuff',
-    say: 'Raise the sore arm forward to shoulder height with the elbow bent ninety degrees. With your other hand, gently push the forearm down so the shoulder rotates inward. Hold two seconds. Say done when finished.',
-    steps: ['Sore arm forward to shoulder height', 'Elbow bent 90°, forearm across in front', 'Other hand pushes the forearm DOWN (internal rotation)', 'Hold 2 seconds, then say "done"'],
+    say: 'Raise the sore arm forward to shoulder height with the elbow bent ninety degrees. With your other hand, gently push the forearm down so the shoulder rotates inward. Hold two seconds. Press Next when finished.',
+    steps: ['Sore arm forward to shoulder height', 'Elbow bent 90°, forearm across in front', 'Other hand pushes the forearm DOWN (internal rotation)', 'Hold 2 seconds, then press Next'],
     follow: [{ id: 'pain', q: 'Did that reproduce your pain?', opts: PAIN_LOC, multi: true }],
   },
   {
     id: 'crossBody', title: 'Cross-body reach (AC joint & posterior capsule)', mode: 'manual', sides: 'affected', focus: 'bones',
     say: 'Reach the sore arm across your chest at shoulder height and gently pull the elbow toward the other shoulder with your free hand. Hold three seconds.',
-    steps: ['Sore arm across the chest at shoulder height', 'Free hand pulls the elbow across', 'Hold 3 seconds, then say "done"'],
+    steps: ['Sore arm across the chest at shoulder height', 'Free hand pulls the elbow across', 'Hold 3 seconds, then press Next'],
     follow: [{ id: 'feel', q: 'What did you feel?', multi: true, opts: [
       { v: 'none', label: 'Nothing', kw: ['nothing', 'no'] },
       { v: 'acPoint', label: 'Pain on the bony top point', kw: ['top', 'bony'] },
@@ -146,8 +146,8 @@ export const TESTS = [
   },
   {
     id: 'obrien', title: "O'Brien active compression (labrum vs AC)", mode: 'manual', sides: 'affected', focus: 'labrum',
-    say: "Stand next to a table or doorframe. Put the sore arm straight out in front at shoulder height, angled slightly across your body, thumb pointing down. Press up hard against the underside of the table for five seconds. Then turn the palm up and press again. Say done when finished.",
-    steps: ['Arm straight, shoulder height, slightly across the midline', 'Thumb DOWN, press up against a table/doorframe for 5 s', 'Then palm UP, press again for 5 s', 'Say "done"'],
+    say: "Stand next to a table or doorframe. Put the sore arm straight out in front at shoulder height, angled slightly across your body, thumb pointing down. Press up hard against the underside of the table for five seconds. Then turn the palm up and press again. Press Next when finished.",
+    steps: ['Arm straight, shoulder height, slightly across the midline', 'Thumb DOWN, press up against a table/doorframe for 5 s', 'Then palm UP, press again for 5 s', 'Press Next'],
     follow: [
       { id: 'thumbDown', q: 'With your thumb down, did it hurt?', multi: true, opts: [
         { v: 'none', label: 'No pain', kw: ['no', 'none'] },
@@ -193,8 +193,8 @@ export const TESTS = [
   },
   {
     id: 'latTest', title: 'Lat length test', mode: 'reps', reps: 2, sides: 'both', focus: 'lat',
-    say: 'Stand with your back flat against a wall, heels a few inches out. Keeping your low back and ribs pinned to the wall and elbows straight, raise both arms overhead toward the wall. Do two slow reps and say "pull" if you feel that pulling.',
-    steps: ['Back flat against a wall, ribs down', 'Elbows straight, thumbs up', 'Raise overhead toward the wall without arching', 'Say "pull" when you feel the pulling'],
+    say: 'Stand with your back flat against a wall, heels a few inches out. Keeping your low back and ribs pinned to the wall and elbows straight, raise both arms overhead toward the wall. Do two slow reps and press L if you feel pulling.',
+    steps: ['Back flat against a wall, ribs down', 'Elbows straight, thumbs up', 'Raise overhead toward the wall without arching', 'Press L when you feel pulling'],
     rep: { metric: 'elevation', up: 130, down: 50, plane: [40, 140] },
     follow: [{ id: 'pull', q: 'Did you feel pulling? Where?', multi: true, opts: [
       { v: 'none', label: 'No pulling', kw: ['no', 'none'] },
@@ -205,8 +205,8 @@ export const TESTS = [
   },
   {
     id: 'scapClick', title: 'Shoulder-blade click check', mode: 'manual', sides: 'both', focus: 'scapula',
-    say: 'Roll your shoulders up, back and down five times, slowly. Then slowly raise and lower the sore arm three times. Say "click" whenever you feel or hear a pop. Turn on "Listen for pops" if you want me to listen too.',
-    steps: ['Slow shoulder rolls ×5 (up → back → down)', 'Then raise the sore arm overhead ×3', 'Say "click" on each pop', 'Optional: turn on Listen for pops'],
+    say: 'Roll your shoulders up, back and down five times, slowly. Then slowly raise and lower the sore arm three times. Press C whenever you feel or hear a pop. Turn on the Click detector to use your microphone too.',
+    steps: ['Slow shoulder rolls ×5 (up → back → down)', 'Then raise the sore arm overhead ×3', 'Press C on each pop', 'Optional: turn on Click detector'],
     follow: [{ id: 'where', q: 'Where did the clicking come from?', multi: true, opts: [
       { v: 'none', label: 'No clicking', kw: ['no', 'none'] },
       { v: 'blade', label: 'Under the shoulder blade', kw: ['blade', 'under', 'back'] },
@@ -224,7 +224,7 @@ export const TESTS = [
   },
   {
     id: 'palpate', title: 'Self-palpation', mode: 'manual', sides: 'affected', focus: 'biceps',
-    say: 'Two quick presses. First, find the bony bump on top of the shoulder where the collarbone ends and press it. Then press the front of the shoulder about three fingers below that bony tip while rotating the arm slightly outward. Say done when finished.',
+    say: 'Two quick presses. First, find the bony bump on top of the shoulder where the collarbone ends and press it. Then press the front of the shoulder about three fingers below that bony tip while rotating the arm slightly outward. Press Next when finished.',
     steps: ['Press the AC joint: the bump at the outer end of the collarbone', 'Press the bicipital groove: front of the shoulder, 3 fingers below the bony tip', 'Compare with the other side'],
     follow: [
       { id: 'ac', q: 'Was the bony bump on top tender?', opts: yn },

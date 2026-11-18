@@ -1,11 +1,11 @@
 // Rolling strip chart of arm elevation + rotation with event markers.
+import { MARK_PATHS } from './marker-icons.js';
 
 const MARK_COLORS = { pain: '#ff4f1f', click: '#665f52', pull: '#626970', unstable: '#343439' };
 const ELEV = { color: '#26262a', min: 0, max: 180, label: 'Elevation' };
 const ROT = { color: '#707078', min: -90, max: 120, label: 'Rotation' };
 const GRID = [0, 90, 180];
 const PAD = { l: 34, r: 10, t: 12, b: 10 };
-const MARK_GLYPHS = { pain: 'ϟ', click: '◖', pull: '↗', unstable: '△' };
 
 export class ArcChart {
   constructor(canvas) {
@@ -29,8 +29,13 @@ export class ArcChart {
 
   push(t, elev, rot) {
     if (!Number.isFinite(t)) return;
-    const last = this.data[this.data.length - 1];
-    if (last && t < last.t) this.clear(); // time went backwards (new video / restart)
+    let last = this.data[this.data.length - 1];
+    if (last && t < last.t) { this.clear(); last = null; }
+    if (last && t - last.t < .2 && (Number.isFinite(elev) && last.e != null && Math.abs(elev - last.e) > 90
+      || Number.isFinite(rot) && last.r != null && Math.abs(rot - last.r) > 120)) {
+      this.breakLine(t);
+      last = null;
+    }
     this.data.push({
       t,
       e: Number.isFinite(elev) ? elev : null,
@@ -45,6 +50,9 @@ export class ArcChart {
     this.marks.push({ type, t });
     this._trim();
     this._schedule();
+  }
+  breakLine(t) {
+    this.data.push({ t, e: null, r: null });
   }
 
   clear() {
@@ -150,7 +158,12 @@ export class ArcChart {
         if (glyphY > y1 - 4) { glyphY = y0 + 4; glyphX -= 16; }
       }
       glyphs.push({ x: glyphX, y: glyphY });
-      ctx.fillText(MARK_GLYPHS[m.type] || '•', glyphX, glyphY - drop);
+      ctx.save();
+      ctx.translate(glyphX - 7, glyphY - drop - 7);
+      ctx.scale(14 / 24, 14 / 24);
+      ctx.strokeStyle = c; ctx.lineWidth = 1.8; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.stroke(new Path2D(MARK_PATHS[m.type] || MARK_PATHS.pain));
+      ctx.restore();
       ctx.shadowBlur = 0;
     }
 

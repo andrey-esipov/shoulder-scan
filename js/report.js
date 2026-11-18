@@ -1,12 +1,13 @@
 // Report rendering: HTML view, plain-text export, JSON download. No external deps.
-import { phaseTitle, formatValue } from './experience.js';
+import { phaseTitle, formatValue, reportDate } from './experience.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const md = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
 const stripMd = (s) => String(s ?? '').replace(/\*\*(.+?)\*\*/g, '$1');
 const txt = (x) => (x == null ? '' : typeof x === 'string' ? x : x.text ?? x.label ?? x.name ?? String(x));
-const pct = (p) => `${Math.round((Number(p) || 0) * 100)}%`;
+const strength = p => p >= .65 ? 'Strong' : p >= .35 ? 'Some' : 'Weak';
 const arr = (x) => (Array.isArray(x) ? x : []);
+const nerveReferral = 'Referral: arrange a clinical assessment of your neck and nerves for symptoms past the elbow.';
 
 function labelClass(label) {
   const l = String(label || '').toLowerCase();
@@ -30,8 +31,8 @@ function condCard(c, { top = false, driver = false } = {}) {
   const lc = labelClass(c.label);
   const w = Math.max(2, Math.min(100, Math.round((Number(c.p) || 0) * 100)));
   return `<article class="rp-cond${top ? ' top' : ''}${driver ? ' driver' : ''}" data-id="${esc(c.id)}">
-    <div class="rp-cond-head"><span class="rp-cond-name">${esc(c.name)}</span>${c.label ? `<span class="badge ${lc}">${esc(c.label)}</span>` : ''}</div>
-    ${c.p >= .5 ? `<div class="rp-prob ${lc}" title="Estimated fit, not a diagnosis"><div class="bar"><i style="width:${w}%"></i></div><span class="pct">${pct(c.p)}</span></div>` : ''}
+    <div class="rp-cond-head"><span class="rp-cond-name">${esc(c.name)}</span><span class="badge ${lc}">${strength(c.p)} evidence</span></div>
+    ${c.p >= .5 ? `<div class="rp-prob ${lc}" aria-hidden="true"><div class="bar"><i style="width:${w}%"></i></div></div>` : ''}
     ${c.blurb ? `<p class="rp-blurb">${esc(c.blurb)}</p>` : ''}
     ${driver ? '' : `<div class="rp-ev">${evList(c.for, 'for', 'Supports', 'Nothing specific yet')}${evList(c.against, 'against', 'Against', 'Nothing against yet')}</div>`}
   </article>`;
@@ -87,20 +88,20 @@ export function renderReport(container, report) {
   }
   const out = [];
   const completion = report.completion;
-  if (completion && completion.completed < completion.total) {
+  const flags = arr(report.flags);
+  if (!flags.length && completion && completion.completed < completion.total) {
     out.push(`<p class="partial-banner" role="status">Partial exam: ${completion.completed} of ${completion.total} tests. Results are provisional.</p>`);
   }
   if (completion?.simulated) out.push('<p class="partial-banner">Simulated demo · Not a clinical result. Camera measurements have not been collected.</p>');
 
-  const flags = arr(report.flags);
   if (flags.length) {
     const lvlName = { emergency: 'Emergency', urgent: 'Urgent', soon: 'See a doctor' };
-    out.push(`<div class="rp-flags">${flags.map((f) => `<div class="rp-flag ${esc(f.level)}"><span class="rp-flag-lvl">${esc(lvlName[f.level] || f.level || 'Note')}</span><span>${esc(f.text)}</span></div>`).join('')}</div>`);
+    out.push(`<div class="rp-flags">${flags.map((f) => `<div class="rp-flag ${esc(f.level)}">${f.level === 'emergency' ? '<strong>Call emergency services now</strong><a href="tel:911">Call 911 / your local emergency number</a>' : `<strong>${esc(lvlName[f.level] || 'Get checked')}</strong>`}<span>${esc(f.text)}</span></div>`).join('')}</div>`);
   }
 
-  if (report.summary) out.push(section('Summary', `<p class="rp-summary">${md(report.summary)}</p>`));
+  if (report.summary) out.push(section('Summary', `<p class="rp-summary">${md(report.summary)}</p>${report.nerveReferral ? `<p>${nerveReferral}</p>` : ''}`));
 
-  const conds = arr(report.conditions).slice().sort((a, b) => (b.p || 0) - (a.p || 0));
+  const conds = (flags.length ? [] : arr(report.conditions)).slice().sort((a, b) => (b.p || 0) - (a.p || 0));
   if (conds.length) {
     const main = conds.filter((c) => (c.p || 0) >= 0.35);
     const shown = main.length ? main.slice(0, 3) : conds.slice(0, 1);
@@ -112,7 +113,7 @@ export function renderReport(container, report) {
     out.push(section('What it could be', body));
   }
 
-  const drivers = arr(report.drivers).slice().sort((a, b) => (b.p || 0) - (a.p || 0));
+  const drivers = (flags.length ? [] : arr(report.drivers)).slice().sort((a, b) => (b.p || 0) - (a.p || 0));
   if (drivers.length) {
     out.push(section('Likely drivers', `<p class="rp-muted" style="margin:0 0 8px">Not diagnoses — the reasons the tissue got overloaded.</p><div class="rp-conds">${drivers.map((d) => condCard(d, { driver: true })).join('')}</div>`, { open: false, count: drivers.length }));
   }
@@ -131,13 +132,13 @@ export function renderReport(container, report) {
       ${ph.rule ? `<p class="rp-phase-rule">${esc(ph.rule)}</p>` : ''}
       <div class="rp-exs">${arr(ph.items).map(exItem).join('')}</div>
     </div>`).join('')}</div>`;
-    out.push(section('Rehab plan', body, { open: (conds[0]?.p || 0) >= .5 && !completion?.simulated && completion?.completed >= completion?.total }));
+    out.push(section((conds[0]?.p || 0) < .35 ? 'General movement plan' : 'Rehab plan', body, { open: (conds[0]?.p || 0) >= .5 && !completion?.simulated && completion?.completed >= completion?.total }));
   }
 
-  const serve = arr(report.serve).map(txt).filter(Boolean);
+  const serve = (flags.length ? [] : arr(report.serve)).map(txt).filter(Boolean);
   if (serve.length) out.push(section('Serve modifications', `<ul class="rp-list">${serve.map((s) => `<li>${md(s)}</li>`).join('')}</ul>`, { open: false, count: serve.length }));
 
-  const next = arr(report.next).map(txt).filter(Boolean);
+  const next = (flags.length ? flags.map(f => f.text) : arr(report.next)).map(txt).filter(Boolean);
   if (next.length) out.push(section('Next steps', `<ol class="rp-list">${next.map((s) => `<li>${md(s)}</li>`).join('')}</ol>`));
 
   const found = arr(report.found).map(txt).filter(Boolean);
@@ -145,9 +146,9 @@ export function renderReport(container, report) {
     ? `<ul class="rp-list found">${found.map((s) => `<li>${md(s)}</li>`).join('')}</ul>`
     : `<p class="rp-muted" style="margin:0">${completion?.simulated ? 'Demo movements are simulated, not measured.' : 'No camera measurements recorded yet.'}</p>`, { open: false, count: found.length || null }));
 
-  out.push(`<p class="rp-foot">${completion?.simulated ? 'Demo motion and angles are simulated, not clinical measurements.' : 'Educational screening from a conversation and camera, not a medical diagnosis. Camera angles are estimates (about ±10°).'} See a sports-medicine doctor or physiotherapist in person for injuries, severe or worsening pain, weakness, numbness, or instability.</p>`);
+  out.push(`<p class="rp-foot">${completion?.simulated ? 'Demo motion and angles are simulated, not clinical measurements.' : 'Educational screening from a conversation and camera, not a medical diagnosis. Camera angles are estimates, not clinical measurements.'} See a sports-medicine doctor or physiotherapist in person for injuries, severe or worsening pain, weakness, numbness, or instability.</p>`);
 
-  container.innerHTML = `<div class="report">${out.join('')}</div>`;
+  container.innerHTML = `<div class="report"><div class="print-brand">Shoulder Scan · ${esc(reportDate(report.generatedAt))}</div>${out.join('')}<p class="print-brand">Bones: BodyParts3D © DBCLS · CC BY-SA 2.1 JP</p></div>`;
 }
 
 export function reportToText(report) {
@@ -155,7 +156,7 @@ export function reportToText(report) {
   const L = [];
   const side = report.side === 'L' ? 'Left' : report.side === 'R' ? 'Right' : '';
   L.push('SHOULDER SCAN REPORT');
-  const meta = [side && `${side} shoulder`, report.generatedAt && new Date(report.generatedAt).toLocaleString()].filter(Boolean);
+  const meta = [side && `${side} shoulder`, report.generatedAt && reportDate(report.generatedAt)].filter(Boolean);
   if (meta.length) L.push(meta.join(' · '));
   L.push('');
   const flags = arr(report.flags);
@@ -165,23 +166,24 @@ export function reportToText(report) {
     L.push('');
   }
   if (report.summary) L.push('SUMMARY', stripMd(report.summary), '');
+  if (report.nerveReferral) L.push(nerveReferral, '');
   if (report.completion?.completed < report.completion?.total) L.push(`Partial exam: ${report.completion.completed} of ${report.completion.total} tests. Results are provisional.`, '');
   if (report.completion?.simulated) L.push('Simulated demo — not a clinical result.', '');
-  const conds = arr(report.conditions).slice().sort((a, b) => (b.p || 0) - (a.p || 0));
+  const conds = (flags.length ? [] : arr(report.conditions)).slice().sort((a, b) => (b.p || 0) - (a.p || 0));
   if (conds.length) {
     L.push('WHAT IT COULD BE');
     conds.forEach((c) => {
-      L.push(`- ${c.name} — ${c.label || ''}${c.p >= .5 ? ` (${pct(c.p)})` : ''}`);
+      L.push(`- ${c.name} — ${strength(c.p)} evidence`);
       if (c.blurb) L.push(`    ${c.blurb}`);
       arr(c.for).map(txt).forEach((t) => L.push(`    + ${t}`));
       arr(c.against).map(txt).forEach((t) => L.push(`    - ${t}`));
     });
     L.push('');
   }
-  const drivers = arr(report.drivers);
+  const drivers = flags.length ? [] : arr(report.drivers);
   if (drivers.length) {
     L.push('LIKELY DRIVERS');
-    drivers.forEach((d) => L.push(`- ${d.name}${d.p >= .5 ? ` (${pct(d.p)})` : ''}${d.blurb ? ': ' + d.blurb : ''}`));
+    drivers.forEach((d) => L.push(`- ${d.name} — ${strength(d.p)} evidence${d.blurb ? ': ' + d.blurb : ''}`));
     L.push('');
   }
   L.push('YOUR MARKERS');
@@ -202,7 +204,7 @@ export function reportToText(report) {
     });
     L.push('');
   }
-  const lists = [['SERVE MODIFICATIONS', report.serve], ['NEXT STEPS', report.next], ['WHAT WE FOUND', report.found]];
+  const lists = [['SERVE MODIFICATIONS', flags.length ? [] : report.serve], ['NEXT STEPS', flags.length ? flags.map(f => f.text) : report.next], ['WHAT WE FOUND', report.found]];
   lists.forEach(([title, items]) => {
     const a = arr(items).map(txt).filter(Boolean);
     if (!a.length) return;
