@@ -703,18 +703,6 @@ export function createAnatomy(container, { onHover, onReady } = {}) {
       const arr = new Float32Array(src.count * 3);
       for (let i = 0; i < src.count; i++) p.fromBufferAttribute(src, i).applyMatrix4(o.matrixWorld).toArray(arr, i * 3);
       const geo = new THREE.BufferGeometry();
-      if (o.name === 'hand') {
-        for (let i = 0; i < src.count; i++) {
-          const weight = clamp((-arr[i * 3 + 1] - 28) / 5, 0, 1) * .85;
-          arr[i * 3] = arr[i * 3] * (1 - weight) - weight;
-          arr[i * 3 + 2] *= 1 - weight;
-          const finger = Math.max(0, -arr[i * 3 + 1] - 33), curl = Math.min(1, finger / 10) * .65;
-          if (finger) {
-            arr[i * 3 + 1] = -33 - finger * Math.cos(curl);
-            arr[i * 3 + 2] += finger * Math.sin(curl);
-          }
-        }
-      }
       geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
       geo.setIndex(o.geometry.index.clone());
       geo.computeVertexNormals();
