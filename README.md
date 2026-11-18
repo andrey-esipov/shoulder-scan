@@ -2,6 +2,8 @@
 
 A webcam shoulder screening tool that runs entirely in your browser. It tracks both arms and your torso, mirrors them on a real 3D skeleton, walks you through a voice-guided shoulder exam, and gives you a ranked list of likely causes with the evidence for and against each one, plus a phased rehab plan with a webcam rep coach.
 
+**Try it live:** https://andrey-esipov.github.io/shoulder-scan/ (or [demo mode, no camera](https://andrey-esipov.github.io/shoulder-scan/?demo=1)).
+
 I built it for my own tennis shoulder. The story is on my Substack, [Hands On](https://andreyesipov.substack.com/).
 
 > **Not medical advice.** Shoulder Scan is a screening aid, not a diagnosis. It can't see tendons or cartilage. Use it to bring better notes to a physical therapist or sports-medicine doctor. If you have a deformity after an injury, sudden weakness, numbness, or night pain that won't settle, get seen.
