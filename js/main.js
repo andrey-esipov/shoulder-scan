@@ -9,7 +9,7 @@ import { voice, parseMarkerCommand } from './voice.js';
 import { PopDetector, audioSupported } from './audio.js';
 import { renderReport, reportToText, downloadJSON } from './report.js';
 import { ArcChart } from './arc-chart.js';
-import { demoTestPose, displayReport, formatValue, phaseTitle, intakePlan, pullingQuestion, cameraErrorMessage, collectMarkers, reportHeadline, reconcilePain, reportDate } from './experience.js';
+import { demoTestPose, displayReport, formatValue, phaseTitle, intakePlan, pullingQuestion, cameraErrorMessage, collectMarkers, reportHeadline, reconcilePain, reportDate, reportMotion } from './experience.js';
 import { markerIcon } from './marker-icons.js';
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -1090,6 +1090,10 @@ function currentReport() {
   const completed = Object.values(exam.tests).filter(t => t.complete && !t.skipped).length;
   const report = displayReport({ ...buildReport(exam), stoppedForSafety: !!exam.stoppedForSafety, nerveReferral: exam.intake.nerve === 'yes' }, { completed, total, simulated: app.source === 'demo' || Object.values(exam.tests).some(t => t.simulated) });
   report.markers = collectMarkers(exam);
+  report.motion = reportMotion(exam);
+  if (!report.flags?.length && app.live) {
+    try { report.anatomySnapshot = anatomy.snapshot({ crop: true }); } catch {}
+  }
   if (!exam.intake.side && report.flags?.length) report.side = null;
   if (exam.intake.overheadSport !== 'yes') report.serve = [];
   return report;
@@ -1114,14 +1118,17 @@ function openReport(report) {
   }
   renderReport($('#reportBody'), report);
   if (report.flags?.length) $('#reportSafety').append($('#reportBody .rp-flags'));
-  $('#reportTitle').textContent = report.flags?.some(f => f.level === 'emergency') ? 'Call emergency services now' : 'Your shoulder';
+  $('#reportModal').classList.toggle('safety-report', !!report.flags?.length);
+  $('#reportTitle').textContent = report.flags?.some(f => f.level === 'emergency') ? 'Call emergency services now' : report.flags?.length ? 'Your shoulder' : 'Shoulder Scan';
   app.report = report;
   $$('#reportBody .coach-btn').forEach(b => {
     b.disabled = run.active;
     b.title = run.active ? 'Finish or pause the exam first.' : 'Start the live rep coach';
   });
   $('#btnPrint').disabled = false; $('#btnExport').disabled = false;
-  $('#reportMeta').textContent = `Shoulder Scan · ${report.side ? `${SIDE_NAME[report.side]} shoulder · ` : ''}${reportDate(report.generatedAt)} · Screening aid, not a diagnosis`;
+  $('#reportMeta').textContent = report.flags?.length
+    ? `Shoulder Scan · ${reportDate(report.generatedAt)} · Screening aid, not a diagnosis`
+    : `${new Date(report.generatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}${report.side ? ` · ${SIDE_NAME[report.side]} shoulder` : ''}`;
   $('#reportModal').classList.add('show');
   requestAnimationFrame(() => { card.scrollTop = 0; $('#reportTitle').focus(); });
 }
@@ -1152,9 +1159,12 @@ function updateModalPause() {
   }
 }
 for (const modal of $$('.modal')) {
-  let returnFocus = null;
+  let returnFocus = null, wasOpen = modal.classList.contains('show');
   new MutationObserver(() => {
-    if (modal.classList.contains('show')) {
+    const open = modal.classList.contains('show');
+    if (open === wasOpen) return;
+    wasOpen = open;
+    if (open) {
       modal.inert = false; modal.setAttribute('aria-hidden', 'false');
       returnFocus = modal.id === 'reportModal' ? reportReturnFocus || $('#btnReport') : $('#btnHistory');
       modal.querySelector('button:not(:disabled)')?.focus({ preventScroll: true });
@@ -1323,7 +1333,7 @@ function showHistory() {
     const row = el('div', 'hist-row');
     const b = el('button', 'hist-item', `<div><b>${esc(reportHeadline(h.report))}</b></div><div class="date">${reportDate(h.at)}${h.side ? ` · ${SIDE_NAME[h.side]} shoulder` : ''}</div>`);
     b.type = 'button';
-    b.onclick = () => { $('#historyModal').classList.remove('show'); app.report = h.report; renderRehab(h.report); openReport(h.report); };
+    b.onclick = () => { $('#historyModal').classList.remove('show'); h.report.motion ||= reportMotion(h.exam || {}); app.report = h.report; renderRehab(h.report); openReport(h.report); };
     const remove = el('button', 'btn ghost', 'Delete'); remove.type = 'button';
     remove.onclick = () => confirmHistoryDelete(() => {
       history.splice(index, 1); localStorage.setItem(HKEY, JSON.stringify(history)); showHistory();

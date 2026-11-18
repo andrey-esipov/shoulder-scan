@@ -324,6 +324,43 @@ input[type="range"]::-moz-range-thumb { border-radius: 50%; background: var(--te
 #reportSafety .rp-flags { margin: 8px 0; }
 .print-brand { display: none; }
 .report { font-size: 13px; }
+#reportModal:not(.safety-report) .modal-card { width: min(1040px, 100%); }
+#reportModal:not(.safety-report) .modal-head { padding: 18px 32px; align-items: center; }
+#reportModal:not(.safety-report) .modal-head h2 { font-size: 19px; letter-spacing: -.5px; }
+#reportModal:not(.safety-report) .modal-body { padding: 0 32px 32px; }
+#reportModal:not(.safety-report) #btnPrint { background: white; border-color: var(--line-2); color: var(--text); }
+.rp-hero { padding: 30px 0 24px; border-bottom: 1px solid var(--line); }
+.rp-hero-title { max-width: 860px; margin: 0; font-size: clamp(32px, 3.2vw, 46px); line-height: 1.08; letter-spacing: -1.6px; font-weight: 500; text-wrap: balance; }
+.rp-hero-context { max-width: 650px; margin: 14px 0 0; font-size: 14px; line-height: 1.65; color: var(--text-2); }
+.rp-hero-status { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: 16px; color: var(--muted); font-size: 11px; }
+.rp-simulated::before { content: ""; display: inline-block; vertical-align: 1px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); margin-right: 7px; }
+.rp-hero-visuals { display: grid; grid-template-columns: 1.1fr 1fr; gap: 40px; align-items: center; margin-top: 28px; }
+.rp-hero figure { margin: 0; min-width: 0; }
+.rp-motion { max-width: 400px; }
+.rp-motion h4 { margin: 0 0 2px; font-size: 15px; font-weight: 500; letter-spacing: -.2px; }
+.rp-motion figcaption > span { color: var(--muted); font-size: 11px; }
+.rom-chart { display: block; width: 100%; margin-top: 6px; overflow: visible; }
+.rom-chart path { fill: none; }
+.rom-track { stroke: var(--line); stroke-width: 1; }
+.rom-arc { stroke-width: 3; stroke-linecap: round; }
+.rom-arc.R { stroke: var(--accent); }
+.rom-arc.L { stroke: var(--text); }
+.rom-end.R { fill: var(--accent); }
+.rom-end.L { fill: var(--text); }
+.rom-tick { stroke: #c6c5bf; stroke-width: 1; }
+.rom-chart text { font-family: inherit; font-size: 10px; fill: var(--muted); }
+.rom-values { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; padding: 0 24px; margin-top: -22px; position: relative; }
+.rom-values > div { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.rom-values strong { font-size: 42px; line-height: 1.1; font-weight: 500; letter-spacing: -1.6px; font-variant-numeric: tabular-nums; }
+.rom-side { font-size: 12px; color: var(--muted); }
+.rom-side::before { content: ""; display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--text); margin-right: 6px; vertical-align: 1px; }
+.rom-side.R::before { background: var(--accent); }
+.rom-note { text-align: center; margin: 14px 0 0; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rp-anatomy-plate { height: 278px; display: grid; place-items: center; padding: 14px; background: #f3f3f0; border-radius: 2px; }
+.rp-anatomy-image { display: block; max-width: 100%; height: 250px; object-fit: contain; }
+.rp-anatomy-empty { max-width: 180px; padding: 20px; color: var(--muted); font-size: 12px; text-align: center; line-height: 1.7; }
+.rp-anatomy figcaption { margin-top: 8px; color: var(--muted); font-size: 10px; }
+.rp-hero-credit { color: var(--muted); font-size: 10px; line-height: 1.7; margin: 22px 0 0; }
 .rp-sec { padding: 4px 0; border-bottom: 1px solid var(--line); }
 .rp-sec > summary { display: flex; justify-content: space-between; list-style: none; padding: 15px 0 10px; font-size: 14px; font-weight: 600; }
 .rp-sec > summary > span { display: inline-flex; align-items: center; gap: 8px; }
@@ -481,6 +518,32 @@ input[type="range"]::-moz-range-thumb { border-radius: 50%; background: var(--te
   .modal-head { flex-wrap: wrap; padding: 16px; gap: 12px; }
   .modal-head h2 { font-size: 22px; }
   .modal-body { padding: 8px 16px 20px; }
+  #reportModal:not(.safety-report) .modal-head { padding: 14px 16px; flex-wrap: nowrap; gap: 8px; }
+  #reportModal:not(.safety-report) .modal-head > div:first-child { min-width: 0; }
+  #reportModal:not(.safety-report) .modal-head h2 { font-size: 16px; }
+  #reportModal:not(.safety-report) .modal-meta { font-size: 9px; line-height: 1.5; }
+  #reportModal:not(.safety-report) .modal-body { padding: 0 20px 24px; }
+  #reportModal:not(.safety-report) .modal-actions { gap: 4px; }
+  #reportModal:not(.safety-report) :is(#btnPrint, #btnExport) { font-size: 0; padding: 0 8px; }
+  #reportModal:not(.safety-report) #btnPrint::after { content: "Print"; font-size: 11px; }
+  #reportModal:not(.safety-report) #btnExport::after { content: "JSON"; font-size: 11px; }
+  .rp-hero { padding: 26px 0 22px; }
+  .rp-hero-title { font-size: 32px; letter-spacing: -1.1px; }
+  .rp-hero-context { font-size: 12px; margin-top: 12px; line-height: 1.6; }
+  .rp-hero-status { display: grid; gap: 4px; font-size: 10px; margin-top: 12px; }
+  .rp-hero-visuals { grid-template-columns: 1.12fr .88fr; gap: 16px; margin-top: 24px; }
+  .rp-motion h4 { font-size: 13px; }
+  .rp-motion figcaption > span { font-size: 10px; }
+  .rom-chart { margin-top: 14px; }
+  .rom-values { gap: 8px; padding: 0; margin-top: -3px; }
+  .rom-values strong { font-size: 28px; letter-spacing: -1px; }
+  .rom-side { font-size: 10px; }
+  .rom-side::before { margin-right: 4px; }
+  .rom-note { font-size: 9px; margin-top: 10px; line-height: 1.5; }
+  .rp-anatomy-plate { height: 190px; padding: 8px; }
+  .rp-anatomy-image { height: 174px; }
+  .rp-anatomy figcaption { font-size: 9px; line-height: 1.5; }
+  .rp-hero-credit { margin-top: 20px; font-size: 9px; }
   .rp-ev { grid-template-columns: 1fr; gap: 12px; }
   #mobileStart { display: block; position: fixed; z-index: 35; inset: auto 0 0; padding: 10px 12px max(10px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line-2); background: #ffffffef; }
   #mobileStart button { width: 100%; }
@@ -502,5 +565,6 @@ input[type="range"]::-moz-range-thumb { border-radius: 50%; background: var(--te
   .report * { color: black !important; }
   .rp-flag.emergency, .rp-flag.emergency * { color: white !important; }
   .rp-cond, .rp-ex, .rp-flag { break-inside: avoid; }
+  .rp-hero { break-inside: avoid; }
   .rp-sec:not([open]) > *:not(summary), .rp-ex details > *:not(summary) { display: block; }
 }

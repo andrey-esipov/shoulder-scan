@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { TESTS } from '../js/protocol.js';
 import { RepCounter } from '../js/rehab.js';
-import { demoTestPose, displayReport, formatValue, phaseTitle, intakePlan, cameraErrorMessage, collectMarkers, reportHeadline, reconcilePain } from '../js/experience.js';
+import { demoTestPose, displayReport, formatValue, phaseTitle, intakePlan, cameraErrorMessage, collectMarkers, reportHeadline, reconcilePain, reportMotion } from '../js/experience.js';
 import { renderReport, reportToText } from '../js/report.js';
 
 for (const test of TESTS.filter(t => t.mode !== 'manual')) {
@@ -95,4 +95,26 @@ assert.equal(unknownLocation.follow.pain, undefined, 'confirming pain must not i
 renderReport(container, { ...report, conditions: [{ name: 'Cuff', label: 'Fits well', p: .72 }] });
 assert.match(container.innerHTML, /Strong/);
 assert.doesNotMatch(container.innerHTML.replace(/<[^>]*>/g, ''), /72%|Fits well/);
+const portrait = {
+  ...report,
+  motion: { forward: { R: 153, L: 170 }, side: { R: 145, L: null } },
+  anatomySnapshot: 'data:image/png;base64,iVBORw0KGgo=',
+};
+renderReport(container, portrait);
+assert.match(container.innerHTML, /class="rp-hero"/);
+assert.match(container.innerHTML, /153°.*170°/s, 'both shoulders retain their own measured values');
+assert.match(container.innerHTML, /role="img".*Range of motion/s);
+assert.match(container.innerHTML, /class="rp-anatomy-image".*data:image\/png;base64/);
+renderReport(container, { ...portrait, motion: undefined, anatomySnapshot: 'https://example.invalid/track.png' });
+assert.match(container.innerHTML, /No movement measurements recorded/);
+assert.doesNotMatch(container.innerHTML, /src="https:/);
+renderReport(container, { ...emergency, motion: portrait.motion, anatomySnapshot: portrait.anatomySnapshot });
+assert.doesNotMatch(container.innerHTML, /class="rp-hero"|class="rp-anatomy-image"|Range of motion/);
+assert.deepEqual(reportMotion({ tests: {
+  flex: { complete: true, sides: { R: { maxElev: 153.4 }, L: { maxElev: 0 } } },
+  abd: { complete: true, skipped: true, sides: { R: { maxElev: 170 } } },
+} }), { forward: { R: 153, L: 0 }, side: { R: null, L: null } });
+assert.deepEqual(reportMotion({ tests: { flex: { complete: false, sides: { R: { maxElev: 100 } } } } }).forward, { R: null, L: null });
+renderReport(container, { ...portrait, motion: { forward: {}, side: { R: 145, L: 160 } } });
+assert.match(container.innerHTML, /Range of motion, side raise: right 145°, left 160°/);
 console.log('experience: test-specific demo, report provenance and readable values pass');

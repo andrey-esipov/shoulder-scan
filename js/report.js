@@ -52,6 +52,51 @@ function exItem(it) {
   </div>`;
 }
 
+function motionChart(motion = {}, simulated = false) {
+  const known = value => Number.isFinite(value) && value >= 0 && value <= 180;
+  const forward = motion.forward || {}, side = motion.side || {};
+  const useSide = ![forward.R, forward.L].some(known) && [side.R, side.L].some(known);
+  const range = useSide ? side : forward, name = useSide ? 'Side raise' : 'Forward raise';
+  const value = side => known(range[side]) ? `${Math.round(range[side])}°` : '—';
+  const arcs = ['R', 'L'].map((side, i) => {
+    const r = 132 - i * 22, angle = Math.PI + (range[side] || 0) * Math.PI / 180;
+    return `<path class="rom-track" d="M${180 - r} 150a${r} ${r} 0 0 1 ${r * 2} 0"/>
+      ${known(range[side]) ? `<path class="rom-arc ${side}" pathLength="180" stroke-dasharray="${range[side]} 180" d="M${180 - r} 150a${r} ${r} 0 0 1 ${r * 2} 0"/><circle class="rom-end ${side}" cx="${180 + r * Math.cos(angle)}" cy="${150 + r * Math.sin(angle)}" r="4"/>` : ''}`;
+  }).join('');
+  const ticks = [0, 45, 90, 135, 180].map(deg => {
+    const a = Math.PI + deg * Math.PI / 180;
+    return `<path class="rom-tick" d="M${180 + 143 * Math.cos(a)} ${150 + 143 * Math.sin(a)}l${6 * Math.cos(a)} ${6 * Math.sin(a)}"/>`;
+  }).join('');
+  const missing = ![range.R, range.L].some(known);
+  return `<figure class="rp-motion">
+    <figcaption><h4>Range of motion</h4><span>${simulated ? 'Simulated · ' : ''}${name.toLowerCase()}</span></figcaption>
+    <svg class="rom-chart" viewBox="0 0 360 172" role="img" aria-label="Range of motion, ${name.toLowerCase()}: right ${value('R')}, left ${value('L')}">
+      ${ticks}${arcs}<text x="20" y="169">0°</text><text x="330" y="169">180°</text>
+    </svg>
+    <div class="rom-values"><div><span class="rom-side R">Right</span><strong>${value('R')}</strong></div><div><span class="rom-side L">Left</span><strong>${value('L')}</strong></div></div>
+    <p class="rom-note">${missing ? 'No movement measurements recorded.' : useSide ? 'Peak elevation during side raises.' : `Side raise · R ${known(side.R) ? `${side.R}°` : '—'} / L ${known(side.L) ? `${side.L}°` : '—'}`}</p>
+  </figure>`;
+}
+
+function reportHero(report) {
+  const lead = arr(report.conditions).slice().sort((a, b) => (b.p || 0) - (a.p || 0))[0];
+  const title = report.nerveReferral ? 'Ask a clinician about your neck / nerves'
+    : lead?.p >= .35 ? lead.name : 'No strong screening pattern';
+  const image = /^data:image\/(?:png|webp);base64,[A-Za-z0-9+/=]+$/.test(report.anatomySnapshot || '')
+    ? `<img class="rp-anatomy-image" src="${esc(report.anatomySnapshot)}" alt="3D anatomy captured from this screening session">`
+    : '<div class="rp-anatomy-empty">No anatomy snapshot saved for this session.</div>';
+  const completion = report.completion;
+  return `<section class="rp-hero">
+    <h3 class="rp-hero-title">${esc(title)}</h3>
+    <p class="rp-hero-context">${report.nerveReferral ? nerveReferral : lead?.p >= .35 ? 'A screening finding to explore with a clinician, not a diagnosis.' : 'The screen is inconclusive. A clinician can help you understand your symptoms.'}</p>
+    <div class="rp-hero-status">${completion?.simulated ? '<span class="rp-simulated">Simulated demo · Not a clinical result</span>' : '<span>Camera angles are estimates</span>'}${completion && completion.completed < completion.total ? `<span>Partial exam: ${completion.completed} of ${completion.total} tests. Results are provisional.</span>` : ''}</div>
+    <div class="rp-hero-visuals">${motionChart(report.motion, completion?.simulated)}
+      <figure class="rp-anatomy"><div class="rp-anatomy-plate">${image}</div><figcaption>Session anatomy${completion?.simulated ? ' · simulated' : ''}</figcaption></figure>
+    </div>
+    <p class="rp-hero-credit">Screening aid, not a diagnosis.<br>Bones: BodyParts3D © DBCLS · CC BY-SA 2.1 JP</p>
+  </section>`;
+}
+
 let printHookInstalled = false;
 function markerText(m) {
   const type = { pain: 'Pain', click: 'Click', pull: 'Pull', unstable: 'Unstable' }[m.type] || m.type;
@@ -89,10 +134,8 @@ export function renderReport(container, report) {
   const out = [];
   const completion = report.completion;
   const flags = arr(report.flags);
-  if (!flags.length && completion && completion.completed < completion.total) {
-    out.push(`<p class="partial-banner" role="status">Partial exam: ${completion.completed} of ${completion.total} tests. Results are provisional.</p>`);
-  }
-  if (completion?.simulated) out.push('<p class="partial-banner">Simulated demo · Not a clinical result. Camera measurements have not been collected.</p>');
+  if (!flags.length) out.push(reportHero(report));
+  else if (completion?.simulated) out.push('<p class="partial-banner">Simulated demo · Not a clinical result. Camera measurements have not been collected.</p>');
 
   if (flags.length) {
     const lvlName = { emergency: 'Emergency', urgent: 'Urgent', soon: 'See a doctor' };

@@ -935,7 +935,22 @@ export function createAnatomy(container, { onHover } = {}) {
     setStress,
     getStrain() { return Object.fromEntries(Object.values(STRUCT).map((s) => [s.id, s.strain])); },
     resetView() { flyTo(HOME); },
-    snapshot() { renderer.render(scene, camera); return renderer.domElement.toDataURL('image/png'); },
+    snapshot({ crop = false } = {}) {
+      renderer.render(scene, camera);
+      const source = renderer.domElement;
+      if (!crop) return source.toDataURL('image/png');
+      collectCorePoints();
+      const bounds = projectedCore(), ratio = source.width / container.clientWidth;
+      const height = Math.round(viewHeight * ratio), margin = 12 * ratio;
+      const x = Math.max(0, Math.floor((bounds.min.x + 1) * source.width / 2 - margin));
+      const y = Math.max(0, Math.floor((1 - bounds.max.y) * height / 2 - margin));
+      const w = Math.max(1, Math.min(source.width, (bounds.max.x + 1) * source.width / 2 + margin) - x);
+      const h = Math.max(1, Math.min(height, (1 - bounds.min.y) * height / 2 + margin) - y);
+      const scale = Math.min(1, 560 / Math.max(w, h)), image = document.createElement('canvas');
+      image.width = Math.round(w * scale); image.height = Math.round(h * scale);
+      image.getContext('2d').drawImage(source, x, y, w, h, 0, 0, image.width, image.height);
+      return image.toDataURL('image/webp', .9);
+    },
     structures: STRUCT,
     resize,
     dispose() {

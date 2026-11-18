@@ -47,6 +47,15 @@ export const reportDate = value => new Date(value || Date.now()).toLocaleString(
   year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
 });
 
+export function reportMotion(exam) {
+  const range = id => Object.fromEntries(['R', 'L'].map(side => {
+    const record = exam.tests?.[id];
+    const value = record?.complete && !record.skipped ? record.sides?.[side]?.maxElev : null;
+    return [side, Number.isFinite(value) && value >= 0 && value <= 180 ? Math.round(value) : null];
+  }));
+  return { forward: range('flex'), side: range('abd') };
+}
+
 export function reconcilePain(record, field, painful, question = {}) {
   if (!painful) record.markers = record.markers.filter(m => m.type !== 'pain');
   else if (field === 'arc') {

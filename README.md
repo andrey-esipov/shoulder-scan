@@ -18,6 +18,8 @@ python3 -m http.server 8000
 
 Open http://localhost:8000. Click **Try demo** without a camera, or **Start camera** to use your webcam. Stand about two meters back so your hips are in frame.
 
+The report opens with a bilateral range-of-motion comparison and a captured 3D anatomy view from that session. Missing or skipped measurements stay blank; demo results remain labeled as simulated. The anatomy image is generated locally from the rendering canvas, saved with the session, and contains no camera pixels. Older sessions without an image say so. No separate share-image export is created.
+
 For recordings, open http://localhost:8000/?demo=1 to start simulated anatomical motion automatically, without opening a camera. Add `&exam=quick` to begin the guided intake too. Demo uses only the anatomical skeleton. The front view fits the torso, pelvis, both arms and fingertips, including overhead and side raises. `__shoulder.anatomy.getFramingMetrics()` exposes the projected bounds for layout checks. Regional presets animate to a fixed front view; **Full** restores the whole upper body. A grey-dot source pill and underlined readout caption explicitly label **simulated**, not measured, values.
 
 During a demo exam, each movement has its own scripted motion and follows the original position gates and repetition thresholds. Manual movements use an illustrated motion where possible; hands-on-only tests auto-skip with an explanation. Neither illustrates actual resistance or a clinical test result. Symptom answers are always yours. Demo reports are labeled simulated; incomplete exams include provisional completion counts.
