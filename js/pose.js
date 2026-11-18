@@ -380,7 +380,7 @@ export function createPoseTracker({ video, overlay }) {
         landmarkerPromise = null;
         const msg = `Could not load the pose model: ${e?.message || e}`;
         status(msg, 'error');
-        throw new Error(msg);
+        throw Object.assign(new Error(msg, { cause: e }), { name: e.name || 'Error' });
       }
       status('Pose model ready', 'ready');
       // Hand model is optional: load in the background, pose tracking works without it.

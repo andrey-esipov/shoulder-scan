@@ -1,5 +1,5 @@
 // Report rendering: HTML view, plain-text export, JSON download. No external deps.
-import { phaseTitle } from './experience.js';
+import { phaseTitle, formatValue } from './experience.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const md = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
@@ -39,7 +39,7 @@ function condCard(c, { top = false, driver = false } = {}) {
 
 function exItem(it) {
   const coach = it.coach
-    ? `<span class="badge coach">Webcam coach</span><button type="button" class="coach-btn" data-ex="${esc(it.id)}" title="Start the live rep coach">
+    ? `<button type="button" class="coach-btn" data-ex="${esc(it.id)}" title="Start the live camera rep coach">
         <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="2.5" y="6" width="14" height="12" rx="3"/><path d="m16.5 10 5-3v10l-5-3"/></svg>Coach me</button>`
     : '';
   const how = it.how ? `<details><summary>How to do it</summary><p>${esc(it.how)}</p></details>` : '';
@@ -52,6 +52,14 @@ function exItem(it) {
 }
 
 let printHookInstalled = false;
+function markerText(m) {
+  const type = { pain: 'Pain', click: 'Click', pull: 'Pull', unstable: 'Unstable' }[m.type] || m.type;
+  const seconds = Math.max(0, Math.floor(m.elapsed || 0));
+  return {
+    label: `${m.side || ''} ${type} · ${formatValue(m.elevation)}${m.elevation == null ? '' : '°'}`.trim(),
+    context: `${m.test || 'Free movement'} · ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')} into exam`,
+  };
+}
 function installPrintHook() {
   if (printHookInstalled || typeof window === 'undefined') return;
   printHookInstalled = true;
@@ -95,7 +103,7 @@ export function renderReport(container, report) {
   const conds = arr(report.conditions).slice().sort((a, b) => (b.p || 0) - (a.p || 0));
   if (conds.length) {
     const main = conds.filter((c) => (c.p || 0) >= 0.35);
-    const shown = main.length ? main : conds.slice(0, 3);
+    const shown = main.length ? main.slice(0, 3) : conds.slice(0, 1);
     const rest = conds.filter((c) => !shown.includes(c));
     let body = `<div class="rp-conds">${shown.map((c, i) => condCard(c, { top: i === 0 })).join('')}</div>`;
     if (rest.length) {
@@ -106,8 +114,14 @@ export function renderReport(container, report) {
 
   const drivers = arr(report.drivers).slice().sort((a, b) => (b.p || 0) - (a.p || 0));
   if (drivers.length) {
-    out.push(section('Likely drivers', `<p class="rp-muted" style="margin:0 0 8px">Not diagnoses — the reasons the tissue got overloaded.</p><div class="rp-conds">${drivers.map((d) => condCard(d, { driver: true })).join('')}</div>`));
+    out.push(section('Likely drivers', `<p class="rp-muted" style="margin:0 0 8px">Not diagnoses — the reasons the tissue got overloaded.</p><div class="rp-conds">${drivers.map((d) => condCard(d, { driver: true })).join('')}</div>`, { open: false, count: drivers.length }));
   }
+
+  const markers = arr(report.markers);
+  out.push(section('Your markers', markers.length ? `<ul class="rp-markers">${markers.map(m => {
+    const { label, context } = markerText(m);
+    return `<li><strong>${esc(label)}</strong><span>${esc(context)}</span></li>`;
+  }).join('')}</ul>` : '<p class="rp-muted">No symptom markers recorded.</p>', { count: markers.length }));
 
   const plan = arr(report.plan).filter((ph) => arr(ph.items).length || ph.rule);
   if (plan.length && !flags.length) {
@@ -117,7 +131,7 @@ export function renderReport(container, report) {
       ${ph.rule ? `<p class="rp-phase-rule">${esc(ph.rule)}</p>` : ''}
       <div class="rp-exs">${arr(ph.items).map(exItem).join('')}</div>
     </div>`).join('')}</div>`;
-    out.push(section('What to do next', body));
+    out.push(section('Rehab plan', body, { open: (conds[0]?.p || 0) >= .5 && !completion?.simulated && completion?.completed >= completion?.total }));
   }
 
   const serve = arr(report.serve).map(txt).filter(Boolean);
@@ -129,9 +143,9 @@ export function renderReport(container, report) {
   const found = arr(report.found).map(txt).filter(Boolean);
   out.push(section('What we found', found.length
     ? `<ul class="rp-list found">${found.map((s) => `<li>${md(s)}</li>`).join('')}</ul>`
-    : '<p class="rp-muted" style="margin:0">No webcam measurements recorded yet.</p>', { open: false, count: found.length || null }));
+    : `<p class="rp-muted" style="margin:0">${completion?.simulated ? 'Demo movements are simulated, not measured.' : 'No camera measurements recorded yet.'}</p>`, { open: false, count: found.length || null }));
 
-  out.push('<p class="rp-foot">Educational screening from a conversation and a webcam, not a medical diagnosis. Webcam angles are estimates (about ±10°). See a sports-medicine doctor or physiotherapist in person for injuries, severe or worsening pain, weakness, numbness, or instability.</p>');
+  out.push(`<p class="rp-foot">${completion?.simulated ? 'Demo motion and angles are simulated, not clinical measurements.' : 'Educational screening from a conversation and camera, not a medical diagnosis. Camera angles are estimates (about ±10°).'} See a sports-medicine doctor or physiotherapist in person for injuries, severe or worsening pain, weakness, numbness, or instability.</p>`);
 
   container.innerHTML = `<div class="report">${out.join('')}</div>`;
 }
@@ -170,6 +184,10 @@ export function reportToText(report) {
     drivers.forEach((d) => L.push(`- ${d.name}${d.p >= .5 ? ` (${pct(d.p)})` : ''}${d.blurb ? ': ' + d.blurb : ''}`));
     L.push('');
   }
+  L.push('YOUR MARKERS');
+  if (!arr(report.markers).length) L.push('No symptom markers recorded.');
+  arr(report.markers).forEach(m => { const { label, context } = markerText(m); L.push(`- ${label} · ${context}`); });
+  L.push('');
   const plan = arr(report.flags).length ? [] : arr(report.plan);
   if (plan.length) {
     L.push('WHAT TO DO NEXT');

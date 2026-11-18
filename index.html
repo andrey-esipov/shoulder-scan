@@ -63,12 +63,12 @@ FORM: B · Stage first. -->
     <div id="stageWelcome">
       <h1>See what's loading<br>inside your shoulder.</h1>
       <p>Camera stays on this device.</p>
-      <div class="welcome-actions"><button id="welcomeCamera" class="btn primary" type="button">Start camera</button><button id="welcomeDemo" class="btn" type="button">Try demo</button></div>
+      <div class="welcome-actions"><button id="welcomeDemo" class="btn primary" type="button">Try demo</button><button id="welcomeCamera" class="btn" type="button">Start camera</button></div>
       <button id="welcomeVideo" class="text-link" type="button">or analyze a video</button>
     </div>
     <div id="three" aria-label="Interactive CT-derived anatomy"></div>
     <details id="anatomyControls">
-      <summary>Anatomy <span aria-hidden="true">⌄</span></summary>
+      <summary>Anatomy</summary>
       <aside id="leftPanel">
     <section class="sec">
       <h3 class="sec-title">Anatomy</h3>
@@ -86,9 +86,8 @@ FORM: B · Stage first. -->
     </section>
 
     <details class="sec metrics-drawer">
-      <summary>Motion &amp; tissue load</summary>
-      <h3 class="sec-title">Motion</h3>
-      <div id="measure" class="meas"></div>
+      <summary>Tissue load</summary>
+      <div id="measure" class="meas" hidden></div>
       <h3 class="sec-title">Tissue load</h3>
       <div id="loadMap" class="meas load"></div>
     </details>
@@ -121,6 +120,7 @@ FORM: B · Stage first. -->
         </button>
     </div>
     <div id="demoLabel">No camera · simulated motion</div>
+    <div id="stageLegend">Mirrored, like looking in a mirror</div>
     <section id="readoutStrip" aria-label="Motion readings">
       <div id="readoutCaption"><span class="reading-dot" aria-hidden="true"></span><span>Measured values</span></div>
       <div class="readout-values">
@@ -144,6 +144,7 @@ FORM: B · Stage first. -->
 
     <div id="tooltip" role="tooltip"></div>
   </main>
+  <div id="mobileReadouts"></div>
 
   <!-- ============ RIGHT PANEL: DOCTOR ============ -->
   <aside id="chatPanel" class="panel">
@@ -163,14 +164,18 @@ FORM: B · Stage first. -->
         </div>
       </div>
       <div class="tabs" role="tablist">
-        <button id="tabExam" class="tab active" type="button" role="tab">Exam</button>
-        <button id="tabRehab" class="tab" type="button" role="tab">Rehab</button>
+        <button id="tabExam" class="tab active" type="button" role="tab" aria-controls="examView">Exam</button>
+        <button id="tabRehab" class="tab" type="button" role="tab" aria-controls="rehabView" tabindex="-1">Rehab</button>
       </div>
       <button id="btnQuick" type="button" hidden></button>
       <button id="btnFull" type="button" hidden></button>
     </div>
 
-    <div id="examView" class="view">
+    <div id="examView" class="view" role="tabpanel" aria-labelledby="tabExam">
+      <div id="examProgress" hidden aria-label="Exam progress">
+        <div class="exam-progress-labels"><span id="progressIntakeLabel">Intake</span><span id="progressTestsLabel">Movement tests</span></div>
+        <div class="exam-progress-tracks"><span id="progressIntakeTrack"><i id="progressIntake"></i></span><span id="progressTestsTrack"><i id="progressTests"></i></span></div>
+      </div>
       <div id="testCard"></div>
       <div id="chatLog" aria-live="polite"></div>
       <form id="chatForm" autocomplete="off">
@@ -191,7 +196,7 @@ FORM: B · Stage first. -->
       </form>
     </div>
 
-    <div id="rehabView" class="view">
+    <div id="rehabView" class="view" role="tabpanel" aria-labelledby="tabRehab" hidden inert>
       <div id="rehabCoach"></div>
       <div id="rehabList"></div>
     </div>
@@ -200,12 +205,12 @@ FORM: B · Stage first. -->
 </div>
 
 <!-- ============ MODALS ============ -->
-<div id="reportModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="reportTitle">
+<div id="reportModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="reportTitle" aria-hidden="true" inert>
   <div class="modal-card">
     <div class="modal-head">
       <div>
         <div class="modal-kicker">Screening report</div>
-        <h2 id="reportTitle">Your shoulder</h2>
+        <h2 id="reportTitle" tabindex="-1">Your shoulder</h2>
         <div id="reportMeta" class="modal-meta"></div>
       </div>
       <div class="modal-actions">
@@ -220,7 +225,7 @@ FORM: B · Stage first. -->
   </div>
 </div>
 
-<div id="historyModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="historyTitle">
+<div id="historyModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="historyTitle" aria-hidden="true" inert>
   <div class="modal-card narrow">
     <div class="modal-head">
       <div>
@@ -237,7 +242,7 @@ FORM: B · Stage first. -->
   </div>
 </div>
 
-<div id="mobileStart"><button class="btn primary" id="mobileQuick" type="button">Start quick exam · 6–8 min</button></div>
+<div id="mobileStart"><button class="btn" id="mobileQuick" type="button">Start quick exam · 4–6 min</button></div>
 <div id="toasts" aria-live="polite"></div>
 </body>
 </html>

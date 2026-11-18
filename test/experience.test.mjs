@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { TESTS } from '../js/protocol.js';
 import { RepCounter } from '../js/rehab.js';
-import { demoTestPose, displayReport, formatValue, phaseTitle } from '../js/experience.js';
+import { demoTestPose, displayReport, formatValue, phaseTitle, intakePlan, cameraErrorMessage, collectMarkers, reportHeadline } from '../js/experience.js';
 import { renderReport, reportToText } from '../js/report.js';
 
 for (const test of TESTS.filter(t => t.mode !== 'manual')) {
@@ -29,6 +29,9 @@ assert.deepEqual(report.completion, { completed: 2, total: 8, simulated: true })
 const inconclusive = displayReport({ conditions: [{ name: 'Cuff irritation', p: .14 }] }, { completed: 8, total: 8 });
 assert.match(inconclusive.summary, /No strong screening pattern/);
 assert.doesNotMatch(inconclusive.summary, /leading|Cuff irritation/);
+const flagged = { conditions: [], flags: [{ text: 'Get checked' }] };
+assert.match(displayReport({ ...flagged, stoppedForSafety: true }, { completed: 0, total: 8 }).summary, /Exam stopped/);
+assert.doesNotMatch(displayReport(flagged, { completed: 8, total: 8 }).summary, /Exam stopped/);
 assert.equal(formatValue(-17), '−17');
 assert.equal(formatValue(-.2), '0');
 assert.equal(formatValue(-.02, 1), '0.0');
@@ -41,4 +44,19 @@ assert.match(container.innerHTML, /Partial exam: 2 of 8 tests/);
 assert.match(container.innerHTML, /Simulated demo/);
 assert.doesNotMatch(container.innerHTML, /34%/);
 assert.doesNotMatch(reportToText(report), /34%/);
+const quick = intakePlan('quick');
+assert.equal(quick.length, 8);
+assert.equal(quick[0].id, 'redFlags');
+assert.ok(intakePlan('full').some(q => q.id === 'deadArm'));
+assert.match(cameraErrorMessage({ name: 'NotAllowedError' }), /permission/i);
+assert.match(cameraErrorMessage({ name: 'NotFoundError' }), /No camera/);
+assert.match(cameraErrorMessage({ name: 'NotReadableError' }), /Teams or Zoom/);
+report.markers = collectMarkers({ startedT: 10, tests: { abd: { markers: [{ type: 'pain', side: 'R', elevation: 85, t: 15 }] } } });
+assert.equal(report.markers[0].elapsed, 5);
+assert.match(report.markers[0].test, /Side raise/);
+assert.equal(reportHeadline(inconclusive), inconclusive.summary.split('. ')[0]);
+renderReport(container, report);
+assert.match(container.innerHTML, /Your markers/);
+assert.match(container.innerHTML, /85°/);
+assert.match(reportToText(report), /YOUR MARKERS/);
 console.log('experience: test-specific demo, report provenance and readable values pass');

@@ -547,7 +547,7 @@ export function createAnatomy(container, { onHover } = {}) {
   let side = 'R';
   let sideSign = 1;
   let tween = null;
-  let demoMode = false, activePreset = 'full', regionView = false;
+  let demoMode = false, idleMode = false, activePreset = 'full', regionView = false;
   function flyTo(cam, dur = 0.8) {
     if (demoMode && ['full', 'muscles', 'bones'].includes(activePreset)) { tween = null; return; }
     const pos = cam.pos.clone(); pos.x *= sideSign;
@@ -770,40 +770,64 @@ export function createAnatomy(container, { onHover } = {}) {
   const stageBounds = new THREE.Box3(), viewBounds = new THREE.Box3();
   const fitTarget = V(0, -20, 0), corner = V(0, 0, 0), viewDirection = V(0, 0, 1);
   const inverseView = new THREE.Quaternion();
-  function fitDemo() {
+  const corePoints = [];
+  function collectCorePoints() {
     scene.updateMatrixWorld(true);
-    stageBounds.makeEmpty();
+    let count = 0;
     scene.traverse((mesh) => {
       if (mesh.isMesh && mesh.material?.userData?.layer === 'bone'
-        && mesh.material.userData.owner !== 'forearm') stageBounds.expandByObject(mesh);
+        && mesh.material.userData.owner !== 'forearm') {
+        if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+        const box = mesh.geometry.boundingBox;
+        for (const x of [box.min.x, box.max.x])
+          for (const y of [box.min.y, box.max.y])
+            for (const z of [box.min.z, box.max.z]) {
+              const p = corePoints[count] ||= V(0, 0, 0);
+              p.set(x, y, z).applyMatrix4(mesh.matrixWorld);
+              count++;
+            }
+      }
     });
-    // Reserve the maximum overhead fingertip reach, independent of today's pose.
-    stageBounds.max.y = Math.max(78, stageBounds.max.y);
-    stageBounds.min.y = Math.min(-66, stageBounds.min.y);
-    const halfWidth = Math.max(Math.abs(stageBounds.min.x), Math.abs(stageBounds.max.x));
-    stageBounds.min.x = -halfWidth;
-    stageBounds.max.x = halfWidth;
+    corePoints.length = count;
+  }
+  function projectedCore() {
+    camera.updateMatrixWorld(true);
+    stageBounds.makeEmpty();
+    for (const p of corePoints) stageBounds.expandByPoint(corner.copy(p).project(camera));
+    return stageBounds;
+  }
+  function fitDemo() {
+    collectCorePoints();
     inverseView.copy(camera.quaternion).invert();
     viewBounds.makeEmpty();
-    for (const x of [stageBounds.min.x, stageBounds.max.x])
-      for (const y of [stageBounds.min.y, stageBounds.max.y])
-        for (const z of [stageBounds.min.z, stageBounds.max.z]) {
-          corner.set(x, y, z).sub(fitTarget).applyQuaternion(inverseView);
-          viewBounds.expandByPoint(corner);
-        }
-    const { distance, target: center } = fitAnatomyBounds(viewBounds, camera.aspect, camera.fov);
+    for (const p of corePoints) viewBounds.expandByPoint(corner.copy(p).sub(fitTarget).applyQuaternion(inverseView));
+    let { distance, target: center } = fitAnatomyBounds(viewBounds, camera.aspect, camera.fov);
     corner.fromArray(center).applyQuaternion(camera.quaternion).add(fitTarget);
     fitTarget.copy(corner);
     viewDirection.set(0, 0, 1).applyQuaternion(camera.quaternion);
-    controls.target.copy(fitTarget);
     camera.position.copy(fitTarget).addScaledVector(viewDirection, distance);
     camera.lookAt(fitTarget);
+    // Fit the projected core, not a world-space box padded by its depth.
+    for (let i = 0; i < 3; i++) {
+      const box = projectedCore(), tan = Math.tan(camera.fov * Math.PI / 360);
+      corner.set((box.min.x + box.max.x) / 2 * distance * tan * camera.aspect,
+        (box.min.y + box.max.y) / 2 * distance * tan, 0).applyQuaternion(camera.quaternion);
+      fitTarget.add(corner);
+      distance *= Math.max((box.max.y - box.min.y) / 2 / .85, (box.max.x - box.min.x) / 2 / .96);
+      camera.position.copy(fitTarget).addScaledVector(viewDirection, distance);
+      camera.lookAt(fitTarget);
+    }
+    controls.target.copy(fitTarget);
   }
   function frame(nowMs) {
     if (disposed) return;
     raf = requestAnimationFrame(frame);
     const dt = Math.min(0.1, (nowMs - last) / 1000); last = nowMs;
     const k = 1 - Math.exp(-dt * 12);
+    if (idleMode) {
+      target.elevation = otherT.elevation = 8 + Math.sin(nowMs / 2500) * 2;
+      torsoT.yaw = Math.sin(nowMs / 5000) * 6;
+    }
     let rotT = target.rotation;
     // Unwrap rotation so the arm never spins the long way round
     while (rotT - cur.rotation > 180) rotT -= 360;
@@ -827,7 +851,7 @@ export function createAnatomy(container, { onHover } = {}) {
       if (tween.t >= 1) tween = null;
     }
     controls.update();
-    if (demoMode && !regionView) fitDemo();
+    if ((demoMode || idleMode) && !regionView) fitDemo();
     tint(nowMs / 1000);
     halo.material.opacity = 0.06 + 0.03 * Math.sin(nowMs / 1400);
     renderer.render(scene, camera);
@@ -836,9 +860,31 @@ export function createAnatomy(container, { onHover } = {}) {
   applyVisibility();
 
   return {
+    setIdle(on) {
+      idleMode = on;
+      if (on) {
+        demoMode = false;
+        applyPreset('full', { frame: false });
+        camera.position.set(0, -20, 300);
+        controls.target.set(0, -20, 0);
+        controls.update();
+      }
+    },
+    getFramingMetrics() {
+      collectCorePoints();
+      const box = projectedCore(), w = container.clientWidth, h = container.clientHeight;
+      return {
+        core: 'Torso, pelvis, shoulders and upper arms; excludes forearms and hands',
+        pane: { width: w, height: h },
+        bbox: { left: (box.min.x + 1) * w / 2, right: (box.max.x + 1) * w / 2,
+          top: (1 - box.max.y) * h / 2, bottom: (1 - box.min.y) * h / 2 },
+        occupancy: { height: (box.max.y - box.min.y) / 2, width: (box.max.x - box.min.x) / 2 },
+      };
+    },
     setDemoMode(on) {
       demoMode = on;
       if (on) {
+        idleMode = false;
         tween = null;
         activePreset = 'full';
         regionView = false;

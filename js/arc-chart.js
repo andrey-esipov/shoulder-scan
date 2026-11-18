@@ -3,10 +3,9 @@
 const MARK_COLORS = { pain: '#ff4f1f', click: '#665f52', pull: '#626970', unstable: '#343439' };
 const ELEV = { color: '#26262a', min: 0, max: 180, label: 'Elevation' };
 const ROT = { color: '#707078', min: -90, max: 120, label: 'Rotation' };
-const GRID = [90, 180];
-const PAD = { l: 30, r: 8, t: 24, b: 7 };
+const GRID = [0, 90, 180];
+const PAD = { l: 34, r: 10, t: 12, b: 10 };
 const MARK_GLYPHS = { pain: 'ϟ', click: '◖', pull: '↗', unstable: '△' };
-const angle = value => value == null ? '—' : `${Math.round(value)}°`.replace('-', '−');
 
 export class ArcChart {
   constructor(canvas) {
@@ -107,7 +106,7 @@ export class ArcChart {
     const X = (t) => x0 + ((t - tStart) / this.win) * pw;
     const Y = (v, s) => y1 - ((v - s.min) / (s.max - s.min)) * ph;
 
-    ctx.font = '500 10px Inter, system-ui, sans-serif';
+    ctx.font = '500 11px Inter, system-ui, sans-serif';
     ctx.textBaseline = 'middle';
 
     // gridlines (elevation scale)
@@ -130,6 +129,7 @@ export class ArcChart {
     ctx.beginPath(); ctx.rect(x0, 0, pw, h); ctx.clip();
 
     // markers (behind lines)
+    const glyphs = [];
     for (const m of this.marks) {
       if (m.t < tStart) continue;
       const x = Math.round(X(m.t)) + 0.5;
@@ -144,20 +144,19 @@ export class ArcChart {
       const drop = age < .5 ? 7 * (1 - age / .5) ** 3 : 0;
       ctx.font = '600 13px system-ui, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(MARK_GLYPHS[m.type] || '•', x, y0 + 4 - drop);
+      let glyphX = Math.min(x1 - 7, Math.max(x0 + 7, x)), glyphY = y0 + 4;
+      while (glyphs.some(g => Math.abs(g.x - glyphX) < 15 && Math.abs(g.y - glyphY) < 15)) {
+        glyphY += 15;
+        if (glyphY > y1 - 4) { glyphY = y0 + 4; glyphX -= 16; }
+      }
+      glyphs.push({ x: glyphX, y: glyphY });
+      ctx.fillText(MARK_GLYPHS[m.type] || '•', glyphX, glyphY - drop);
       ctx.shadowBlur = 0;
     }
 
     this._line('r', ROT, X, Y, tStart, y1, false);
     this._line('e', ELEV, X, Y, tStart, y1, true);
     ctx.restore();
-
-    // legend top-left
-    ctx.textAlign = 'left';
-    ctx.font = '600 10.5px Inter, system-ui, sans-serif';
-    const lastE = this._last('e'), lastR = this._last('r');
-    ctx.fillStyle = ELEV.color;
-    ctx.fillText(`${this.side || 'R'} elev ${angle(lastE)} · Rot ${angle(lastR)}`, x0 + 2, 10);
 
     if (!this.data.length && !this.marks.length) {
       ctx.textAlign = 'center';
@@ -169,11 +168,6 @@ export class ArcChart {
       ctx.fillStyle = '#5e5e63';
       ctx.fillText(text, cx, cy);
     }
-  }
-
-  _last(k) {
-    for (let i = this.data.length - 1; i >= 0; i--) if (this.data[i][k] != null) return this.data[i][k];
-    return null;
   }
 
   _line(k, s, X, Y, tStart, yBase, fill) {
