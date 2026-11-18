@@ -4,7 +4,9 @@ const MARK_COLORS = { pain: '#ff4f1f', click: '#665f52', pull: '#626970', unstab
 const ELEV = { color: '#26262a', min: 0, max: 180, label: 'Elevation' };
 const ROT = { color: '#707078', min: -90, max: 120, label: 'Rotation' };
 const GRID = [90, 180];
-const PAD = { l: 30, r: 50, t: 22, b: 7 };
+const PAD = { l: 30, r: 8, t: 24, b: 7 };
+const MARK_GLYPHS = { pain: 'ϟ', click: '◖', pull: '↗', unstable: '△' };
+const angle = value => value == null ? '—' : `${Math.round(value)}°`.replace('-', '−');
 
 export class ArcChart {
   constructor(canvas) {
@@ -33,7 +35,7 @@ export class ArcChart {
     this.data.push({
       t,
       e: Number.isFinite(elev) ? elev : null,
-      r: Number.isFinite(rot) ? rot : null,
+      r: Number.isFinite(rot) ? last?.r == null ? rot : last.r + (rot - last.r) * .16 : null,
     });
     this._trim();
     this._schedule();
@@ -140,7 +142,9 @@ export class ArcChart {
       ctx.fillStyle = c;
       const age = Math.max(0, now - m.t);
       const drop = age < .5 ? 7 * (1 - age / .5) ** 3 : 0;
-      ctx.beginPath(); ctx.arc(x, y0 + 1 - drop, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.font = '600 13px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(MARK_GLYPHS[m.type] || '•', x, y0 + 4 - drop);
       ctx.shadowBlur = 0;
     }
 
@@ -151,30 +155,19 @@ export class ArcChart {
     // legend top-left
     ctx.textAlign = 'left';
     ctx.font = '600 10.5px Inter, system-ui, sans-serif';
-    let lx = x0 + 2;
-    for (const s of [ELEV, ROT]) {
-      ctx.fillStyle = s.color;
-      ctx.fillRect(lx, 9, 12, 2.5);
-      ctx.fillStyle = '#5e5e63';
-      ctx.fillText(s.label, lx + 17, 10);
-      lx += 17 + ctx.measureText(s.label).width + 16;
-    }
-
-    // latest values at right
     const lastE = this._last('e'), lastR = this._last('r');
-    ctx.textAlign = 'left';
-    ctx.font = '600 11px Inter, system-ui, sans-serif';
     ctx.fillStyle = ELEV.color;
-    ctx.fillText(lastE == null ? '—' : `${Math.round(lastE)}°`, x1 + 8, y0 + 4);
-    ctx.font = '600 11px Inter, system-ui, sans-serif';
-    ctx.fillStyle = ROT.color;
-    ctx.fillText(lastR == null ? '—' : `${Math.round(lastR)}°`, x1 + 8, y1 - 2);
+    ctx.fillText(`${this.side || 'R'} elev ${angle(lastE)} · Rot ${angle(lastR)}`, x0 + 2, 10);
 
     if (!this.data.length && !this.marks.length) {
       ctx.textAlign = 'center';
       ctx.font = '500 11.5px Inter, system-ui, sans-serif';
       ctx.fillStyle = '#5e5e63';
-      ctx.fillText('Waiting for motion', x0 + pw / 2, y0 + ph / 2);
+      const text = 'Waiting for motion', cx = x0 + pw / 2, cy = y0 + ph / 2;
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(cx - 65, cy - 9, 130, 18);
+      ctx.fillStyle = '#5e5e63';
+      ctx.fillText(text, cx, cy);
     }
   }
 

@@ -16,9 +16,11 @@ cd shoulder-scan
 python3 -m http.server 8000
 ```
 
-Open http://localhost:8000. Click **Demo** to try it without a camera, or **Camera** to use your webcam. Stand about two meters back so your hips are in frame.
+Open http://localhost:8000. Click **Try demo** without a camera, or **Start camera** to use your webcam. Stand about two meters back so your hips are in frame.
 
-For recordings, open http://localhost:8000/?demo=1 to start simulated anatomical motion automatically, without opening a camera. Add `&exam=quick` to begin the guided intake too (answers are still yours; it does not fabricate exam results). Demo gives the moving skeleton the full stage, with aspect-aware framing around the torso, shoulders and upper arms; hands and forearms may extend beyond the stage during overhead motion. The grey, dashed source pill and grey-dot readout caption explicitly label these as **simulated**, not measured, values.
+For recordings, open http://localhost:8000/?demo=1 to start simulated anatomical motion automatically, without opening a camera. Add `&exam=quick` to begin the guided intake too. Demo uses only the anatomical skeleton, with centered, aspect-aware overview framing that reserves room for overhead arms. Clicking a regional anatomy preset deliberately zooms to that region. A solid grey-dot source pill and underlined readout caption explicitly label **simulated**, not measured, values.
+
+During a demo exam, the simulator follows each movement test's original position gates and repetition thresholds; these movement tests complete automatically. Resistance and other manual tests explain that they cannot be simulated and require **Next**. Symptom answers are always yours. Demo reports are labeled simulated; incomplete exams include provisional completion counts.
 
 The light, stage-first layout separates bilateral elevation, bilateral ER/IR and torso turn into a dedicated strip below the model. Camera mode keeps the real video and neutral pose overlay beside the anatomy and labels values **Measured**. Open **Anatomy** above the skeleton for side selection, presets, peel and layers; expand **Motion & tissue load** there for detailed readings. On phones the large anatomy leads, readings form a grid, markers are 2×2, and the exam is below the stage. **Report** opens an honest empty state until you have exam data.
 
@@ -29,9 +31,10 @@ The camera has to be served from `localhost` (or https). Opening `index.html` as
 - **Tracking:** MediaPipe Pose Landmarker (33 body points) plus Hand Landmarker (21 points per hand). Pose alone can't see a straight arm roll around its own axis, so rotation at 90° uses the knuckle line of the hand.
 - **Measurements:** arm elevation, plane, internal/external rotation, elbow bend, shoulder hike, trunk lean, and torso turn, for both sides.
 - **3D view:** Three.js with real CT-derived bone meshes from BodyParts3D, peelable layers, and presets for the rotator cuff, labrum, biceps, lat, scapula, and nerves.
-- **Exam:** quick (~4 min) and full (~8 min) guided exams with browser speech. Mark events with `P` or `Space` (pain), `C` (click), `L` (pull), `U` (unstable). Optional mic click detector.
+- **Exam:** quick (6–8 min) and full (12–15 min) guided exams, beginning with your symptoms rather than assumptions. Sport questions are conditional. Voice is off by default; enable it in the header. Mark events with `P` or `Space` (pain), `C` (click), `L` (pull), `U` (unstable). Optional mic click detector.
 - **Reasoning:** a deterministic, evidence-weighted engine in `js/reasoning.js`. No LLM. The report shows what counted for and against each possibility, plus red flags.
-- **Rehab:** a phased plan with a webcam coach that counts reps.
+- **Safety:** red flags block testing with advice to seek care and an explicit, not-advised override. Exercises remain paused while flags are present.
+- **Rehab:** a phased plan with a live-camera coach that counts reps. Coaching is disabled during an exam; Demo offers a camera-start prompt instead.
 
 Your video is processed locally and never leaves your machine. The models download from public CDNs on first load. Session history is kept in `localStorage` (last 20 sessions).
 
@@ -46,6 +49,8 @@ Your video is processed locally and never leaves your machine. The models downlo
 ```bash
 node test/metrics.test.mjs
 node test/reasoning.test.mjs
+node test/experience.test.mjs
+node test/framing.test.mjs
 ```
 
 ## Credits and license

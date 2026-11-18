@@ -5,6 +5,7 @@ for (const aspect of [1.9, 1, .7]) {
   for (const bounds of [
     { min: { x: -45, y: -66, z: -15 }, max: { x: 45, y: 32, z: 20 } },
     { min: { x: -48, y: -66, z: -25 }, max: { x: 48, y: 42, z: 30 } },
+    { min: { x: -48, y: -66, z: -25 }, max: { x: 48, y: 78, z: 30 } },
   ]) {
     const { distance, target } = fitAnatomyBounds(bounds, aspect);
     const tan = Math.tan(36 * Math.PI / 360);

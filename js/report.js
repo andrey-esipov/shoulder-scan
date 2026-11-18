@@ -1,4 +1,5 @@
 // Report rendering: HTML view, plain-text export, JSON download. No external deps.
+import { phaseTitle } from './experience.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const md = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
@@ -30,7 +31,7 @@ function condCard(c, { top = false, driver = false } = {}) {
   const w = Math.max(2, Math.min(100, Math.round((Number(c.p) || 0) * 100)));
   return `<article class="rp-cond${top ? ' top' : ''}${driver ? ' driver' : ''}" data-id="${esc(c.id)}">
     <div class="rp-cond-head"><span class="rp-cond-name">${esc(c.name)}</span>${c.label ? `<span class="badge ${lc}">${esc(c.label)}</span>` : ''}</div>
-    <div class="rp-prob ${lc}" title="Estimated fit"><div class="bar"><i style="width:${w}%"></i></div><span class="pct">${pct(c.p)}</span></div>
+    ${c.p >= .5 ? `<div class="rp-prob ${lc}" title="Estimated fit, not a diagnosis"><div class="bar"><i style="width:${w}%"></i></div><span class="pct">${pct(c.p)}</span></div>` : ''}
     ${c.blurb ? `<p class="rp-blurb">${esc(c.blurb)}</p>` : ''}
     ${driver ? '' : `<div class="rp-ev">${evList(c.for, 'for', 'Supports', 'Nothing specific yet')}${evList(c.against, 'against', 'Against', 'Nothing against yet')}</div>`}
   </article>`;
@@ -77,6 +78,11 @@ export function renderReport(container, report) {
     return;
   }
   const out = [];
+  const completion = report.completion;
+  if (completion && completion.completed < completion.total) {
+    out.push(`<p class="partial-banner" role="status">Partial exam: ${completion.completed} of ${completion.total} tests. Results are provisional.</p>`);
+  }
+  if (completion?.simulated) out.push('<p class="partial-banner">Simulated demo · Not a clinical result. Camera measurements have not been collected.</p>');
 
   const flags = arr(report.flags);
   if (flags.length) {
@@ -104,10 +110,10 @@ export function renderReport(container, report) {
   }
 
   const plan = arr(report.plan).filter((ph) => arr(ph.items).length || ph.rule);
-  if (plan.length) {
+  if (plan.length && !flags.length) {
     const body = `<div class="rp-plan">${plan.map((ph) => `<div class="rp-phase">
       <span class="rp-phase-num">${esc(ph.phase)}</span>
-      <div class="rp-phase-title">${esc(ph.title)}</div>
+      <div class="rp-phase-title">${esc(phaseTitle(ph))}</div>
       ${ph.rule ? `<p class="rp-phase-rule">${esc(ph.rule)}</p>` : ''}
       <div class="rp-exs">${arr(ph.items).map(exItem).join('')}</div>
     </div>`).join('')}</div>`;
@@ -145,11 +151,13 @@ export function reportToText(report) {
     L.push('');
   }
   if (report.summary) L.push('SUMMARY', stripMd(report.summary), '');
+  if (report.completion?.completed < report.completion?.total) L.push(`Partial exam: ${report.completion.completed} of ${report.completion.total} tests. Results are provisional.`, '');
+  if (report.completion?.simulated) L.push('Simulated demo — not a clinical result.', '');
   const conds = arr(report.conditions).slice().sort((a, b) => (b.p || 0) - (a.p || 0));
   if (conds.length) {
     L.push('WHAT IT COULD BE');
     conds.forEach((c) => {
-      L.push(`- ${c.name} — ${c.label || ''} (${pct(c.p)})`);
+      L.push(`- ${c.name} — ${c.label || ''}${c.p >= .5 ? ` (${pct(c.p)})` : ''}`);
       if (c.blurb) L.push(`    ${c.blurb}`);
       arr(c.for).map(txt).forEach((t) => L.push(`    + ${t}`));
       arr(c.against).map(txt).forEach((t) => L.push(`    - ${t}`));
@@ -159,14 +167,14 @@ export function reportToText(report) {
   const drivers = arr(report.drivers);
   if (drivers.length) {
     L.push('LIKELY DRIVERS');
-    drivers.forEach((d) => L.push(`- ${d.name} (${pct(d.p)})${d.blurb ? ': ' + d.blurb : ''}`));
+    drivers.forEach((d) => L.push(`- ${d.name}${d.p >= .5 ? ` (${pct(d.p)})` : ''}${d.blurb ? ': ' + d.blurb : ''}`));
     L.push('');
   }
-  const plan = arr(report.plan);
+  const plan = arr(report.flags).length ? [] : arr(report.plan);
   if (plan.length) {
     L.push('WHAT TO DO NEXT');
     plan.forEach((ph) => {
-      L.push(`Phase ${ph.phase}: ${ph.title || ''}`);
+      L.push(phaseTitle(ph));
       if (ph.rule) L.push(`  Rule: ${ph.rule}`);
       arr(ph.items).forEach((it) => {
         L.push(`  • ${it.name}${it.dose ? ' — ' + it.dose : ''}${it.coach ? ' [webcam coach]' : ''}`);

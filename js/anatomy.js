@@ -547,22 +547,24 @@ export function createAnatomy(container, { onHover } = {}) {
   let side = 'R';
   let sideSign = 1;
   let tween = null;
-  let demoMode = false, activePreset = 'full';
+  let demoMode = false, activePreset = 'full', regionView = false;
   function flyTo(cam, dur = 0.8) {
-    if (demoMode) { tween = null; return; }
+    if (demoMode && ['full', 'muscles', 'bones'].includes(activePreset)) { tween = null; return; }
     const pos = cam.pos.clone(); pos.x *= sideSign;
     const target = cam.target.clone(); target.x *= sideSign;
     tween = { t: 0, dur, p0: camera.position.clone(), t0: controls.target.clone(), p1: pos, t1: target };
   }
-  function applyPreset(name) {
+  function applyPreset(name, { frame = true } = {}) {
     activePreset = name;
+    regionView = frame && !['full', 'muscles', 'bones'].includes(name);
     const p = PRESETS[name] || PRESETS.full;
     for (const l of LAYERS) layerVal[l.id] = p.layers[l.id] ?? l.def;
     focus = p.focus ? new Set(p.focus) : null;
     ghost = p.ghost || {};
     peel = 0;
     applyVisibility();
-    flyTo(p.cam);
+    if (frame) flyTo(p.cam);
+    else tween = null;
     return { layers: { ...layerVal }, peel };
   }
 
@@ -775,6 +777,12 @@ export function createAnatomy(container, { onHover } = {}) {
       if (mesh.isMesh && mesh.material?.userData?.layer === 'bone'
         && mesh.material.userData.owner !== 'forearm') stageBounds.expandByObject(mesh);
     });
+    // Reserve the maximum overhead fingertip reach, independent of today's pose.
+    stageBounds.max.y = Math.max(78, stageBounds.max.y);
+    stageBounds.min.y = Math.min(-66, stageBounds.min.y);
+    const halfWidth = Math.max(Math.abs(stageBounds.min.x), Math.abs(stageBounds.max.x));
+    stageBounds.min.x = -halfWidth;
+    stageBounds.max.x = halfWidth;
     inverseView.copy(camera.quaternion).invert();
     viewBounds.makeEmpty();
     for (const x of [stageBounds.min.x, stageBounds.max.x])
@@ -819,7 +827,7 @@ export function createAnatomy(container, { onHover } = {}) {
       if (tween.t >= 1) tween = null;
     }
     controls.update();
-    if (demoMode) fitDemo();
+    if (demoMode && !regionView) fitDemo();
     tint(nowMs / 1000);
     halo.material.opacity = 0.06 + 0.03 * Math.sin(nowMs / 1400);
     renderer.render(scene, camera);
@@ -832,6 +840,8 @@ export function createAnatomy(container, { onHover } = {}) {
       demoMode = on;
       if (on) {
         tween = null;
+        activePreset = 'full';
+        regionView = false;
         controls.target.copy(fitTarget);
         camera.position.set(0, -20, 300);
         controls.update();
