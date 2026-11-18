@@ -1,5 +1,6 @@
 // Report rendering: HTML view, plain-text export, JSON download. No external deps.
-import { phaseTitle, formatValue, reportDate, reportHeadline, displayReport } from './experience.js';
+import { phaseTitle, formatValue, reportDate, reportHeadline, displayReport, activityCopy } from './experience.js';
+import { MARK_PATHS } from './marker-icons.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const md = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
@@ -7,6 +8,10 @@ const stripMd = (s) => String(s ?? '').replace(/\*\*(.+?)\*\*/g, '$1');
 const txt = (x) => (x == null ? '' : typeof x === 'string' ? x : x.text ?? x.label ?? x.name ?? String(x));
 const strength = p => p >= .65 ? 'Strong' : p >= .35 ? 'Some' : 'Weak';
 const arr = (x) => (Array.isArray(x) ? x : []);
+function reportActivity(report) {
+  const sports = report.overheadSport === true;
+  return { ...report, plan: activityCopy(report.plan, sports), next: activityCopy(report.next, sports), serve: sports ? report.serve : [] };
+}
 const nerveReferral = 'Referral: arrange a clinical assessment of your neck and nerves for symptoms past the elbow.';
 const flagText = f => String(f.text || '').replace(/\s*Call emergency services now\.?/gi, '').trim();
 function summaryText(report) {
@@ -63,12 +68,16 @@ function exItem(it) {
   </div>`;
 }
 
+function motionRange(motion = {}) {
+  const forward = motion.forward || {}, side = motion.side || {};
+  const useSide = ![forward.R, forward.L].some(Number.isFinite) && [side.R, side.L].some(Number.isFinite);
+  return { range: useSide ? side : forward, name: useSide ? 'Side raise' : 'Forward raise' };
+}
 function motionChart(motion = {}, simulated = false) {
   const known = value => Number.isFinite(value) && value >= 0 && value <= 180;
-  const forward = motion.forward || {}, side = motion.side || {};
-  const useSide = ![forward.R, forward.L].some(known) && [side.R, side.L].some(known);
-  const range = useSide ? side : forward, name = useSide ? 'Side raise' : 'Forward raise';
-  const value = side => known(range[side]) ? `${Math.round(range[side])}°` : '—';
+  const { range, name } = motionRange(motion);
+  const value = side => known(range[side]) ? `${Math.round(range[side])}°` : 'Not tested';
+  const reading = side => `<strong${known(range[side]) ? '' : ' class="rom-untested"'}>${value(side)}</strong>`;
   const arcs = ['R', 'L'].map((side, i) => {
     const r = 132 - i * 22, angle = Math.PI + (range[side] || 0) * Math.PI / 180;
     return `<path class="rom-track" d="M${180 - r} 150a${r} ${r} 0 0 1 ${r * 2} 0"/>
@@ -82,11 +91,37 @@ function motionChart(motion = {}, simulated = false) {
   return `<figure class="rp-motion">
     <figcaption><h4>Range of motion</h4><span>${simulated ? 'Simulated · ' : ''}${name.toLowerCase()}</span></figcaption>
     <svg class="rom-chart" viewBox="0 0 360 172" role="img" aria-label="Range of motion, ${name.toLowerCase()}: right ${value('R')}, left ${value('L')}">
-      ${ticks}${arcs}<text x="20" y="169">0°</text><text x="330" y="169">180°</text>
+      ${ticks}${arcs}<text x="48" y="169" text-anchor="middle">0°</text><text x="312" y="169" text-anchor="middle">180°</text>
     </svg>
-    <div class="rom-values"><div><span class="rom-side R">R · Right</span><strong>${value('R')}</strong></div><div><span class="rom-side L">L · Left</span><strong>${value('L')}</strong></div></div>
+    <div class="rom-values"><div><span class="rom-side R">R · Right</span>${reading('R')}</div><div><span class="rom-side L">L · Left</span>${reading('L')}</div></div>
     <p class="rom-note">${missing ? 'No movement measurements recorded.' : `Peak elevation during ${name.toLowerCase()}s.`}</p>
   </figure>`;
+}
+
+function findingsTiles(report) {
+  const motion = report.motion || {};
+  const peaks = ['R', 'L'].map(s => [motion.forward?.[s], motion.side?.[s]].filter(Number.isFinite));
+  const values = Object.values(motionRange(motion).range).filter(Number.isFinite);
+  const lead = Math.max(0, ...arr(report.conditions).map(c => Number(c.p) || 0));
+  const sides = peaks.map((v, i) => v.length ? ['Right', 'Left'][i] : null).filter(Boolean);
+  const tiles = [
+    [report.completion?.simulated ? 'Simulated peak raise' : 'Peak arm raise', values.length ? `${Math.round(Math.max(...values))}°` : 'Not tested'],
+    ['Symptom markers', String(arr(report.markers).length)],
+    ['Pattern strength', strength(lead)],
+    ['Side tested', sides.join(' + ') || 'Not tested'],
+  ];
+  return `<section class="rp-findings"><h4>What we found</h4><div class="rp-stat-grid">${tiles.map(([label, value]) => `<div class="rp-stat"><span>${label}</span><strong>${value}</strong></div>`).join('')}</div>${report.painReconciliation ? `<p class="rp-reconciliation">${esc(report.painReconciliation)}</p>` : ''}</section>`;
+}
+
+function markerTimeline(markers) {
+  const known = markers.filter(m => Number.isFinite(m.elevation));
+  if (!known.length) return '';
+  return `<figure class="rp-marker-timeline"><figcaption>Symptoms by arm angle <span>Elevation · moment of press</span></figcaption><svg viewBox="0 0 640 94" role="img" aria-label="Symptom markers on an elevation axis, from zero to 180 degrees">
+    <path class="marker-axis" d="M24 49H616"/>${[0, 45, 90, 135, 180].map(a => `<path class="marker-axis" d="M${24 + a / 180 * 592} 45v8"/><text x="${24 + a / 180 * 592}" y="80" text-anchor="middle">${a}°</text>`).join('')}
+    ${known.map((m, i) => {
+      const x = 24 + Math.max(0, Math.min(180, m.elevation)) / 180 * 592, y = i % 2 ? 31 : 9;
+      return `<g><title>${esc(markerText(m).label)} · ${esc(markerText(m).context)}</title><path class="marker-stem" d="M${x} ${y + 22}V49"/><svg x="${x - 10}" y="${y}" width="20" height="20" viewBox="0 0 24 24"><path class="marker-glyph" d="${MARK_PATHS[m.type] || MARK_PATHS.pain}"/></svg></g>`;
+    }).join('')}</svg></figure>`;
 }
 
 function reportHero(report) {
@@ -145,6 +180,7 @@ export function renderReport(container, report) {
     container.innerHTML = '<div class="report"><p class="rp-muted" style="padding:18px 0">No report yet. Finish a few exam steps first.</p></div>';
     return;
   }
+  report = reportActivity(report);
   const out = [];
   const completion = report.completion;
   const flags = arr(report.flags);
@@ -156,7 +192,8 @@ export function renderReport(container, report) {
     out.push(`<div class="rp-flags">${flags.map((f) => `<div class="rp-flag ${esc(f.level)}">${f.level === 'emergency' ? '<strong>Call emergency services now</strong><a href="tel:911">Call 911 / your local emergency number</a>' : `<strong>${esc(lvlName[f.level] || 'Get checked')}</strong>`}<span>${esc(flagText(f))}</span></div>`).join('')}</div>`);
   }
 
-  if (report.summary) out.push(section('Summary', `<p class="rp-summary">${md(plain(summaryText(report)))}</p>${report.painReconciliation ? `<p class="rp-reconciliation">${esc(report.painReconciliation)}</p>` : ''}`));
+  if (!flags.length) out.push(findingsTiles(report));
+  if (report.summary && (flags.length || report.nerveReferral || reportHeadline(report) === 'Incomplete screening')) out.push(section('Screening context', `<p class="rp-summary">${md(plain(summaryText(report)))}</p>`));
 
   const conds = (flags.length ? [] : arr(report.conditions)).slice().sort((a, b) => (b.p || 0) - (a.p || 0));
   if (conds.length) {
@@ -167,7 +204,7 @@ export function renderReport(container, report) {
     if (rest.length) {
       body += `<details class="rp-sec rp-more"><summary><span>${rest.length} less likely condition${rest.length > 1 ? 's' : ''}</span></summary><div class="rp-conds">${rest.map((c) => condCard(c)).join('')}</div></details>`;
     }
-    out.push(section('What it could be', body));
+    out.push(section(main.length ? 'What it could be' : 'Worth ruling out', body));
   }
 
   const drivers = (flags.length ? [] : arr(report.drivers)).slice().sort((a, b) => (b.p || 0) - (a.p || 0));
@@ -176,7 +213,7 @@ export function renderReport(container, report) {
   }
 
   const markers = arr(report.markers).slice().sort((a, b) => (a.elapsed || 0) - (b.elapsed || 0));
-  out.push(section('Your markers', markers.length ? `<ul class="rp-markers">${markers.map(m => {
+  out.push(section('Your markers', markers.length ? `${markerTimeline(markers)}<ul class="rp-markers">${markers.map(m => {
     const { label, context } = markerText(m);
     return `<li><strong>${esc(label)}</strong><span>${esc(context)}</span></li>`;
   }).join('')}</ul>` : '<p class="rp-muted">No symptom markers recorded.</p>', { count: markers.length }));
@@ -198,11 +235,6 @@ export function renderReport(container, report) {
   const next = (flags.length ? [] : arr(report.next)).map(txt).filter(Boolean);
   if (next.length) out.push(section('Next steps', `<ol class="rp-list">${next.map((s) => `<li>${md(s)}</li>`).join('')}</ol>`));
 
-  const found = arr(report.found).map(txt).filter(Boolean);
-  out.push(section('What we found', found.length
-    ? `<ul class="rp-list found">${found.map((s) => `<li>${md(s)}</li>`).join('')}</ul>`
-    : `<p class="rp-muted" style="margin:0">${completion?.simulated ? 'Demo movements are simulated, not measured.' : 'No camera measurements recorded yet.'}</p>`, { open: false, count: found.length || null }));
-
   out.push(`<p class="rp-foot">${completion?.simulated ? 'Demo motion and angles are simulated, not clinical measurements.' : 'Educational screening from a conversation and camera, not a medical diagnosis. Camera angles are estimates, not clinical measurements.'} See a sports-medicine doctor or physiotherapist in person for injuries, severe or worsening pain, weakness, numbness, or instability.<br>Bones: BodyParts3D © DBCLS · CC BY-SA 2.1 JP</p>`);
 
   container.innerHTML = `<div class="report">${flags.length ? `<div class="print-brand">Shoulder Scan · ${esc(reportDate(report.generatedAt))}</div>` : ''}${out.join('')}</div>`;
@@ -210,6 +242,7 @@ export function renderReport(container, report) {
 
 export function reportToText(report) {
   if (!report) return '';
+  report = reportActivity(report);
   const L = [];
   const side = report.side === 'L' ? 'Left' : report.side === 'R' ? 'Right' : '';
   L.push('SHOULDER SCAN REPORT');

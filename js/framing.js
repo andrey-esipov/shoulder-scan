@@ -17,7 +17,7 @@ export function fitReachEnvelope(points, aspect, fov = 36) {
   const tan = Math.tan(fov * Math.PI / 360);
   const distance = Math.max(...points.map(p => Math.max(
     Math.abs(p[0]) / (tan * Math.max(.1, aspect) * .96),
-    Math.abs(p[1] - target[1]) / (tan * .94)
+    Math.abs(p[1] - target[1]) / (tan * .96)
   ) + p[2]));
   return { target, distance };
 }

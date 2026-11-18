@@ -29,6 +29,24 @@ export function cameraErrorMessage(error) {
   if (name === 'TimeoutError') return 'The camera did not respond. Check the browser permission prompt and close other apps using your camera, then try again.';
   return error?.message || "Couldn't start the camera. Check its connection and browser permissions, or use Demo.";
 }
+export function activityCopy(value, overheadSport = false) {
+  if (overheadSport || value == null) return value;
+  if (Array.isArray(value)) return value.filter(v => v?.id !== 'intervalServe').map(v => activityCopy(v));
+  if (typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, activityCopy(v)]));
+  if (typeof value !== 'string') return value;
+  return value.replace(/Keep playing groundstrokes[^.]*\./g, 'Keep comfortable daily activities; reduce painful overhead activity.')
+    .replace(/Pause or cut serves and overheads to 50% pace\./g, 'Reduce overhead activity to a comfortable range.')
+    .replace(/Add serves 10 at a time\./g, 'Increase activity gradually, only if symptoms settle by the next morning.')
+    .replace(/Most overuse tennis shoulders improve clearly within 6 weeks\./g, 'Arrange a clinical review if symptoms persist or worsen.')
+    .replace(/\btennis players\b/gi, 'people with shoulder symptoms')
+    .replace(/\bserving arm\b/gi, 'affected arm')
+    .replace(/\bserve cocking\b/gi, 'overhead rotation')
+    .replace(/\bfull serve extension\b/gi, 'full overhead reach')
+    .replace(/\bserving\b/gi, 'overhead activity')
+    .replace(/\bserves?\b/gi, 'overhead movement')
+    .replace(/\bgroundstrokes\b/gi, 'daily activities')
+    .replace(/\btennis\b/gi, 'overuse');
+}
 export function collectMarkers(exam) {
   const records = (exam.freeMarkers || []).map(m => ({ ...m, test: 'Free movement' }));
   for (const [id, test] of Object.entries(exam.tests || {})) {

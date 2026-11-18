@@ -34,6 +34,7 @@ FORM: B · Stage first. -->
         <svg viewBox="0 0 30 30" width="30" height="30" fill="currentColor"><circle cx="9" cy="21" r="7"/><circle cx="22" cy="8" r="7"/></svg>
       </span>
       <span class="brand-name">Shoulder Scan</span>
+      <span class="mobile-demo-chip">DEMO</span>
     </div>
 
     <button id="sourceMenuButton" class="btn" type="button" aria-expanded="false" aria-controls="sourceMenu" title="Motion source">Source</button>
@@ -48,7 +49,7 @@ FORM: B · Stage first. -->
     <div id="trackPill" class="pill" role="status" aria-live="polite"><span class="dot"></span><span class="txt">Choose a source</span></div>
 
     <div class="top-actions">
-      <div class="report-action" tabindex="0" aria-describedby="reportHint"><button id="btnReport" class="btn ghost" type="button" disabled>
+      <div class="report-action" tabindex="0" aria-describedby="reportHint" title="Finish an exam to unlock"><button id="btnReport" class="btn ghost" type="button" disabled title="Finish an exam to unlock">
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3v5h5M8.5 13h7M8.5 16.5h4.5"/></svg>Report
       </button><span id="reportHint" role="tooltip">Report appears after an exam</span></div>
       <button id="btnHistory" class="btn ghost icon" type="button" title="Past sessions" aria-label="Past sessions">
@@ -112,7 +113,7 @@ FORM: B · Stage first. -->
       <div id="camEmpty">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="6" width="14" height="12" rx="3"/><path d="m16.5 10 5-3v10l-5-3"/></svg>
         <span>Camera off</span>
-        <div id="cameraRecovery" hidden><p>Couldn't start the camera. It may be in use by Teams or Zoom.</p><div class="welcome-actions"><button id="retryCamera" class="btn" type="button">Try again</button><button id="recoverDemo" class="btn primary" type="button">Use demo</button></div></div>
+        <div id="cameraRecovery" hidden><p>Check your camera connection and browser permissions.</p><div class="welcome-actions"><button id="retryCamera" class="btn" type="button">Try again</button><button id="recoverDemo" class="btn primary" type="button">Try demo</button><button id="recoverUpload" class="btn" type="button">Upload video</button></div></div>
       </div>
     </div>
     <div class="cam-tools">
@@ -124,13 +125,14 @@ FORM: B · Stage first. -->
         </button>
     </div>
     <div id="demoLabel">No camera · simulated motion</div>
+    <div id="movementTarget" role="status" hidden></div>
     <section id="readoutStrip" aria-label="Motion readings">
       <div id="readoutCaption"><span class="reading-dot" aria-hidden="true"></span><span>Measured values</span></div>
       <div class="readout-values">
-        <div class="joint-readout" id="readR">R elev<strong>—</strong></div>
-        <div class="joint-readout" id="readL">L elev<strong>—</strong></div>
-        <div class="joint-readout" id="rotationReadout">R rotation (out / in)<strong>—</strong></div>
-        <div class="joint-readout" id="rotationReadoutL">L rotation (out / in)<strong>—</strong></div>
+        <div class="joint-readout" id="readR">Right arm raise<strong>—</strong></div>
+        <div class="joint-readout" id="readL">Left arm raise<strong>—</strong></div>
+        <div class="joint-readout" id="rotationReadout">Right rotation<small>+out / −in</small><strong>—</strong></div>
+        <div class="joint-readout" id="rotationReadoutL">Left rotation<small>+out / −in</small><strong>—</strong></div>
         <div id="torsoReadout" class="joint-readout">Torso turn<strong>—</strong></div>
       </div>
     </section>
@@ -142,7 +144,7 @@ FORM: B · Stage first. -->
         <button type="button" data-marker="pull">Pull<kbd>L</kbd></button>
         <button type="button" data-marker="unstable">Unstable<kbd>U</kbd></button>
       </div>
-      <div id="arcWrap"><canvas id="arcChart" aria-label="Elevation and rotation timeline"></canvas><div class="marker-legend"><span class="legend-elevation">Elevation</span><span class="legend-rotation">Rotation</span><span id="timelineSide">R/L · Showing R</span></div></div>
+      <div id="arcWrap"><canvas id="arcChart" aria-label="Elevation and rotation timeline"></canvas><div class="marker-legend"><span class="legend-elevation">Elevation</span><span class="legend-rotation">Rotation</span><button id="timelineSide" type="button" aria-pressed="false">R/L · Showing R</button></div></div>
     </div>
 
     <div id="tooltip" role="tooltip"></div>
@@ -181,10 +183,11 @@ FORM: B · Stage first. -->
         <div class="exam-progress-tracks"><span id="progressIntakeTrack"><i id="progressIntake"></i></span><span id="progressTestsTrack"><i id="progressTests"></i></span></div>
       </div>
       <div id="testCard"></div>
+      <button id="answersToggle" class="text-link" type="button" hidden aria-expanded="false" aria-controls="chatLog">Show answers (0)</button>
       <div id="chatLog" aria-live="polite"></div>
       <form id="chatForm" autocomplete="off">
         <div class="composer">
-          <input id="chatText" type="text" placeholder="Type an answer…" aria-label="Your answer" />
+          <input id="chatText" type="text" placeholder="Start an exam to answer" aria-label="Your answer" disabled />
           <button id="btnMic" class="btn icon ghost" type="button" title="Speak your answer" aria-label="Microphone">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
           </button>

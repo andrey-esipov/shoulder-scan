@@ -1018,7 +1018,7 @@ export function createAnatomy(container, { onHover, onReady } = {}) {
           root.scale.x = savedFrame.side === 'L' ? -1 : 1;
           applyPreset('full', { frame: false });
           layerVal.bones = 1; layerVal.cuff = 1; layerVal.skin = 0; ghost = {};
-          focus = new Set(['supraspinatus', 'infraspinatus', 'teresMinor']);
+          focus = new Set();
           applyVisibility();
           Object.assign(stress, savedFrame.stress);
           trunk.rotation.set(torsoC.flex * DEG2RAD, -torsoC.yaw * DEG2RAD, -torsoC.lean * DEG2RAD, 'YXZ');

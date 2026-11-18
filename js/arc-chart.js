@@ -218,6 +218,7 @@ export class ArcChart {
         ctx.lineTo(seg[seg.length - 1][0], yBase); ctx.closePath(); ctx.fill();
       }
       ctx.strokeStyle = s.color;
+      ctx.setLineDash(fill ? [] : [5, 4]);
       ctx.lineWidth = fill ? 2 : 1.6;
       ctx.globalAlpha = fill ? 1 : 0.85;
       ctx.shadowBlur = 0;
@@ -226,6 +227,7 @@ export class ArcChart {
       if (seg.length === 1) ctx.arc(seg[0][0], seg[0][1], 1.5, 0, Math.PI * 2);
       ctx.stroke();
       ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+      ctx.setLineDash([]);
     }
   }
 }

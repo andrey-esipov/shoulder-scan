@@ -5,6 +5,16 @@ import { constrainForearmDirection, insideBody } from '../js/anatomy-pose.js';
 import { demoTestPose, demoPeakPose, displayReport, formatValue, phaseTitle, intakePlan, cameraErrorMessage, collectMarkers, reportHeadline, reconcilePain, reportMotion, painArcEvidence, localDate } from '../js/experience.js';
 import { renderReport, reportToText } from '../js/report.js';
 import { armFromAngles } from '../js/metrics.js';
+import { activityCopy } from '../js/experience.js';
+
+const sportPlan = { plan: [{ rule: 'Keep playing groundstrokes if pain is ≤ 3/10. Add serves 10 at a time.', items: [
+  { id: 'intervalServe', name: 'Interval serve program' },
+  { id: 'sideER', why: 'Builds the cuff that decelerates the serve.' },
+] }], next: ['Most overuse tennis shoulders improve clearly within 6 weeks.'] };
+assert.doesNotMatch(JSON.stringify(activityCopy(sportPlan)), /tennis|groundstroke|serves?/i, 'non-sport answers receive generic next steps and rehab');
+assert.equal(activityCopy(sportPlan).plan[0].items.length, 1, 'serve-specific exercise is gated');
+assert.deepEqual(activityCopy(sportPlan, true), sportPlan, 'overhead athletes retain sport guidance');
+assert.equal(sportPlan.plan[0].items.length, 2, 'personalizing copy does not mutate saved reports');
 
 assert.equal(demoPeakPose(TESTS.find(t => t.id === 'flex')).elevation, 145);
 assert.equal(demoPeakPose(TESTS.find(t => t.id === 'abd')).elevation, 145);
@@ -68,6 +78,18 @@ assert.equal(formatValue(-.02, 1), '0.0');
 assert.equal(formatValue(null), '—');
 assert.equal(phaseTitle({ phase: 1, title: 'Calm it down (weeks 0–2)' }), 'Phase 1 · Calm it down (weeks 0–2)');
 const container = { innerHTML: '' };
+renderReport(container, {
+  ...inconclusive, completion: { completed: 8, total: 8, simulated: false },
+  motion: { forward: { R: 120, L: null } },
+  markers: [{ type: 'pain', side: 'R', elevation: 88, elapsed: 3, test: 'Forward raise' }],
+});
+assert.match(container.innerHTML, /Worth ruling out/);
+assert.match(container.innerHTML, /Weak evidence/);
+assert.match(container.innerHTML, /rom-untested">Not tested/);
+assert.ok(container.innerHTML.indexOf('What we found') < container.innerHTML.indexOf('Worth ruling out'), 'findings tiles precede hypotheses');
+assert.match(container.innerHTML, /Symptoms by arm angle/);
+assert.match(container.innerHTML, /R Pain · 88°/, 'report retains the press-time angle');
+assert.doesNotMatch(container.innerHTML, /rp-summary/, 'inconclusive reports do not repeat the hero summary');
 report.conditions.push({ name: 'Lower likelihood', p: .34 });
 renderReport(container, report);
 assert.match(container.innerHTML, /Partial exam: 2 of 8 tests/);

@@ -233,13 +233,13 @@ export function createPoseTracker({ video, overlay }) {
       return landmarker;
     },
 
-    async startCamera() {
+    async startCamera({ signal } = {}) {
       if (!navigator.mediaDevices?.getUserMedia) {
         const msg = 'Camera access is not available in this browser (a secure context such as localhost is required).';
         status(msg, 'error');
         throw new Error(msg);
       }
-      await api.init();
+      signal?.throwIfAborted();
       releaseSource();
       status('Starting camera…', 'loading');
       const hint = setTimeout(() => status('Waiting for camera… allow access in the browser prompt, or close apps using it (Teams, Zoom)', 'loading'), 3000);
@@ -248,8 +248,11 @@ export function createPoseTracker({ video, overlay }) {
       }, ms))]);
       try {
         const ask = (v) => {
-          const p = navigator.mediaDevices.getUserMedia({ video: v, audio: false });
-          return withTimeout(p, 20000, 'camera did not respond').catch((e) => {
+          const p = navigator.mediaDevices.getUserMedia({ video: v, audio: false }).then(s => {
+            if (signal?.aborted) { s.getTracks().forEach(t => t.stop()); signal.throwIfAborted(); }
+            return s;
+          });
+          return withTimeout(p, 5000, 'camera did not respond').catch((e) => {
             // If the browser grants access after we gave up, release the camera instead of leaking it.
             if (e.name === 'TimeoutError') p.then((s) => s.getTracks().forEach((t) => t.stop()), () => {});
             throw e;
@@ -266,11 +269,14 @@ export function createPoseTracker({ video, overlay }) {
         video.loop = false;
         video.srcObject = stream;
         await withTimeout(video.play(), 10000, 'camera stream did not start');
+        await api.init();
+        signal?.throwIfAborted();
       } catch (e) {
+        if (signal?.aborted) throw e;
         releaseSource();
         const msg = cameraError(e);
         status(msg, 'error');
-        throw new Error(msg);
+        throw Object.assign(new Error(msg, { cause: e }), { name: e.name || 'Error' });
       } finally {
         clearTimeout(hint);
       }
