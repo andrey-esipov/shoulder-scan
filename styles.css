@@ -819,10 +819,10 @@ details[open] > summary::after { transform: rotate(45deg); }
 #toastDock { position: absolute; top: 4px; left: 16px; width: 430px; max-width: calc(100% - 32px); height: 28px; display: flex; align-items: center; justify-content: center; }
 #toasts { position: static; transform: none; max-width: 100%; }
 #toasts .toast { padding: 6px 12px; font-size: 11px; line-height: 18px; border-radius: 5px; box-shadow: none; animation: none; }
-.tc-live { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 3px 12px; padding: 14px 0 6px; border-top: 1px solid var(--line); margin-top: 14px; }
+.tc-live { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; align-content: center; flex: none; min-height: 76px; overflow: visible; gap: 3px 12px; padding: 12px 0 6px; border-top: 1px solid var(--line); margin-top: 14px; }
 .tc-live span { font-size: 11px; color: var(--muted); }
-.tc-live strong { grid-column: 2; grid-row: 1 / span 2; font-size: 32px; font-weight: 500; line-height: 1; font-variant-numeric: tabular-nums; }
-.tc-live small { font-size: 10px; color: var(--muted); }
+.tc-live strong { grid-column: 2; grid-row: 1; min-width: 72px; text-align: right; font-size: 32px; font-weight: 500; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.tc-live small { grid-column: 1 / -1; font-size: 10px; line-height: 1.5; color: var(--muted); }
 #testCard.answering .tc-live { display: none; }
 .rp-marker-strip { margin: 0 0 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 .rp-marker-strip h4 { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 18px; font-size: 11px; font-weight: 600; margin: 0 0 14px; }
@@ -858,14 +858,14 @@ details[open] > summary::after { transform: rotate(45deg); }
 .context-previous:empty { display: none; }
 @media (max-width: 700px) {
   #app { overflow-anchor: none; padding-bottom: calc(128px + env(safe-area-inset-bottom)); }
-  #mobileReadouts { padding-bottom: 96px; }
+  #mobileReadouts { padding-bottom: 0; }
   .exam-running #mobileReadouts, .rehab-active #mobileReadouts { padding-bottom: 0; }
   #mobileStart { position: sticky; inset: auto; bottom: 0; display: flex; align-items: center; gap: 10px; min-height: 82px; background: white; border: 1px solid var(--line); border-radius: 7px; }
   #mobileStart #mobileQuick { flex: 1; width: auto; font-size: 11px; }
   body:not(.exam-running) #app #mobileStart #mobileQuick:not(:disabled) { background: var(--accent); border-color: var(--accent); color: var(--text); }
   #mobileStart .mobile-full { width: 78px; padding: 8px 0; min-height: 44px; border: 0; background: none; color: var(--text); font-size: 11px; white-space: nowrap; text-decoration: underline; text-underline-offset: 3px; }
   #anatomyControls > summary { width: 44px; }
-  #mobileControls #toastDock { position: static; width: 100%; max-width: none; height: 32px; flex: none; transform: none; }
+  #mobileControls #toastDock { position: absolute; top: auto; bottom: calc(100% - 4px); left: 50%; width: max-content; max-width: calc(100% - 24px); height: auto; transform: translateX(-50%); pointer-events: none; }
   #mobileControls #toasts { width: 100%; display: flex; justify-content: center; }
   body.rehab-active #mobileReadouts { display: none; }
   body.camera-recovery #mobileStart { display: none; }

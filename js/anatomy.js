@@ -1018,7 +1018,7 @@ export function createAnatomy(container, { onHover, onReady } = {}) {
           Object.assign(torsoC, torso || { yaw: 0, flex: 0, lean: 0 });
           root.scale.x = savedFrame.side === 'L' ? -1 : 1;
           applyPreset('full', { frame: false });
-          layerVal.bones = 1; layerVal.cuff = 1; layerVal.skin = 0; ghost = {};
+          layerVal.bones = 1; layerVal.cuff = 0; layerVal.skin = 0; ghost = {};
           focus = new Set(['supraspinatus', 'infraspinatus', 'teresMinor', 'subscapularis']);
           applyVisibility();
           Object.assign(stress, savedFrame.stress);
@@ -1061,6 +1061,14 @@ export function createAnatomy(container, { onHover, onReady } = {}) {
             ctx.drawImage(capture.domElement, 0, 0);
             const shoulder = new THREE.Vector3().setFromMatrixPosition(groups.H.matrixWorld).project(captureCamera);
             const x = (shoulder.x + 1) * w / 2, y = (1 - shoulder.y) * h / 2;
+            ctx.save();
+            ctx.translate(x, y + 8); ctx.scale(1, 1.15);
+            const highlight = ctx.createRadialGradient(0, 0, 8, 0, 0, 52);
+            highlight.addColorStop(0, 'rgba(255,79,31,.7)');
+            highlight.addColorStop(.55, 'rgba(255,79,31,.7)');
+            highlight.addColorStop(1, 'rgba(255,79,31,0)');
+            ctx.fillStyle = highlight; ctx.fillRect(-52, -52, 104, 104);
+            ctx.restore();
             const angle = Math.round(savedFrame.pose.elevation), radius = 76;
             const sign = savedFrame.side === 'L' ? -1 : 1;
             const end = Math.PI / 2 - sign * angle * DEG2RAD;
