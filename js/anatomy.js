@@ -1008,7 +1008,6 @@ export function createAnatomy(container, { onHover, onReady } = {}) {
         layers: { ...layerVal }, focus, ghost, peel, activePreset, regionView, tween, sideSign,
         halo: halo.visible, glows: glows.map(g => [g.glow.visible, g.ring.visible]),
       } : null;
-      const captureHands = [];
       try {
         if (savedFrame) {
           const { other, torso, ...arm } = savedFrame.pose;
@@ -1035,9 +1034,6 @@ export function createAnatomy(container, { onHover, onReady } = {}) {
               mesh.material.transparent = false;
               mesh.material.depthWrite = true;
             }
-            if (/^hand(?:_|$)/i.test(mesh.userData.partName || '')) {
-              captureHands.push([mesh, mesh.visible]); mesh.visible = false;
-            }
           });
           halo.visible = false;
           for (const g of glows) { g.glow.visible = false; g.ring.visible = false; }
@@ -1061,10 +1057,6 @@ export function createAnatomy(container, { onHover, onReady } = {}) {
             const image = document.createElement('canvas'); image.width = w; image.height = h;
             const ctx = image.getContext('2d');
             ctx.drawImage(capture.domElement, 0, 0);
-            ctx.globalCompositeOperation = 'destination-in';
-            const fade = ctx.createLinearGradient(0, 0, 0, h);
-            fade.addColorStop(0, '#fff'); fade.addColorStop(.83, '#fff'); fade.addColorStop(1, '#fff0');
-            ctx.fillStyle = fade; ctx.fillRect(0, 0, w, h);
             return image.toDataURL('image/webp', .94);
           } finally { capture.dispose(); capture.forceContextLoss(); }
         }
@@ -1083,7 +1075,6 @@ export function createAnatomy(container, { onHover, onReady } = {}) {
         image.getContext('2d').drawImage(source, x, y, w, h, 0, 0, image.width, image.height);
         return image.toDataURL('image/webp', .9);
       } finally {
-        for (const [mesh, visible] of captureHands) mesh.visible = visible;
         if (saved) {
           Object.assign(cur, saved.cur); Object.assign(otherC, saved.other); Object.assign(torsoC, saved.torso);
           Object.assign(stress, saved.stress); Object.assign(layerVal, saved.layers);

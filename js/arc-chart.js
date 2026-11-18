@@ -55,9 +55,9 @@ export class ArcChart {
     this._schedule();
   }
 
-  mark(type, t) {
+  mark(type, t, elevation = null) {
     if (!Number.isFinite(t)) t = this.data.length ? this.data[this.data.length - 1].t : 0;
-    this.marks.push({ type, t });
+    this.marks.push({ type, t, elevation });
     this._trim();
     this._schedule();
   }
@@ -179,8 +179,22 @@ export class ArcChart {
       ctx.shadowBlur = 0;
     }
 
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x0, y0, pw, ph); ctx.clip();
     this._line('r', ROT, X, Y, tStart, y1, false);
     this._line('e', ELEV, X, Y, tStart, y1, true);
+    ctx.restore();
+    const recent = this.marks.at(-1);
+    if (recent && now - recent.t < 4 && Number.isFinite(recent.elevation)) {
+      const x = Math.min(x1 - 52, Math.max(x0 + 2, X(recent.t) - 48));
+      const y = Math.max(y0 + 10, Math.min(y1 - 10, Y(recent.elevation, ELEV)));
+      ctx.fillStyle = '#fff'; ctx.fillRect(x, y - 9, 48, 18);
+      ctx.fillStyle = MARK_COLORS[recent.type] || '#343439';
+      ctx.font = '600 11px Inter, system-ui, sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(`${Math.round(recent.elevation)}°`, x + 24, y);
+      ctx.strokeStyle = ctx.fillStyle; ctx.setLineDash([]); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x + 48, y); ctx.lineTo(Math.min(x1 - 1, X(recent.t)), Y(recent.elevation, ELEV)); ctx.stroke();
+    }
     ctx.restore();
 
     if (!this.data.length && !this.marks.length) {
@@ -209,6 +223,7 @@ export class ArcChart {
     }
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     for (const seg of segs) {
+      if (seg.length < 2) continue;
       if (fill && seg.length > 1) {
         const g = ctx.createLinearGradient(0, Y(s.max, s), 0, yBase);
         g.addColorStop(0, 'rgba(60,60,55,.10)'); g.addColorStop(1, 'rgba(60,60,55,0)');
@@ -224,7 +239,6 @@ export class ArcChart {
       ctx.shadowBlur = 0;
       ctx.beginPath();
       seg.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
-      if (seg.length === 1) ctx.arc(seg[0][0], seg[0][1], 1.5, 0, Math.PI * 2);
       ctx.stroke();
       ctx.shadowBlur = 0; ctx.globalAlpha = 1;
       ctx.setLineDash([]);

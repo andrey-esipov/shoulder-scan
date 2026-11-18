@@ -23,8 +23,8 @@ export function intakePlan(mode) {
 export const pullingQuestion = () => pullDetail;
 export function cameraErrorMessage(error) {
   const name = error?.name || error?.cause?.name;
-  if (['NotAllowedError', 'SecurityError'].includes(name)) return 'Camera blocked — allow it in the address bar, then try again.';
-  if (['NotFoundError', 'OverconstrainedError'].includes(name)) return 'No camera found. Connect a camera, then try again, or use Demo.';
+  if (['NotAllowedError', 'SecurityError'].includes(name)) return 'Allow camera access in the address bar or browser site settings, then try again.';
+  if (['NotFoundError', 'OverconstrainedError'].includes(name)) return 'Connect a camera, then try again. You can also try Demo or upload a video.';
   if (['NotReadableError', 'AbortError'].includes(name)) return "Couldn't start the camera. It may be in use by Teams or Zoom.";
   if (name === 'TimeoutError') return 'The camera did not respond. Check the browser permission prompt and close other apps using your camera, then try again.';
   return error?.message || "Couldn't start the camera. Check its connection and browser permissions, or use Demo.";
@@ -45,14 +45,20 @@ export function activityCopy(value, overheadSport = false) {
     .replace(/\bserving\b/gi, 'overhead activity')
     .replace(/\bserves?\b/gi, 'overhead movement')
     .replace(/\bgroundstrokes\b/gi, 'daily activities')
-    .replace(/\btennis\b/gi, 'overuse');
+    .replace(/\btennis\b/gi, 'overuse')
+    .replace(/reduce painful overhead activity\.\s*Reduce overhead activity to a comfortable range\./gi, 'reduce painful overhead activity to a comfortable range.');
 }
 export function collectMarkers(exam) {
-  const records = (exam.freeMarkers || []).map(m => ({ ...m, test: 'Free movement' }));
+  const records = [...(exam.sessionMarkers || []), ...(exam.freeMarkers || []).map(m => ({ ...m, test: m.test || 'Free movement' }))];
   for (const [id, test] of Object.entries(exam.tests || {})) {
-    records.push(...(test.markers || []).map(m => ({ ...m, test: TESTS.find(t => t.id === id)?.title || id })));
+    records.push(...(test.markers || []).map(m => ({ ...m, test: m.test || TESTS.find(t => t.id === id)?.title || id, calibration: id === 'calib' })));
   }
-  return records.map(m => ({ ...m, elapsed: m.elapsed ?? Math.max(0, m.t - (exam.startedT || 0)) })).sort((a, b) => a.elapsed - b.elapsed);
+  const unique = new Map();
+  for (const m of records) {
+    const key = m.id || (Number.isFinite(m.t) ? `${m.t}:${m.type}:${m.side}` : m.recordedAt ? `${m.recordedAt}:${m.type}:${m.side}` : Symbol());
+    if (!unique.has(key)) unique.set(key, { ...m, elapsed: m.elapsed ?? Math.max(0, m.t - (exam.startedT || 0)) });
+  }
+  return [...unique.values()].sort((a, b) => a.t - b.t);
 }
 export function reportHeadline(report) {
   const flag = report?.flags?.[0];
@@ -95,7 +101,11 @@ export function painArcEvidence(record = {}, side = 'R') {
 }
 
 export function reconcilePain(record, field, painful, question = {}) {
-  if (!painful) record.markers = record.markers.filter(m => m.type !== 'pain');
+  if (!painful) record.markers = record.markers.filter(m => {
+    if (m.type !== 'pain') return true;
+    m.retracted = true;
+    return false;
+  });
   else if (field === 'arc') {
     const angle = record.markers.find(m => m.type === 'pain')?.elevation;
     record.follow.arc = angle >= 145 ? 'top' : angle >= 55 ? 'middle' : 'whole';

@@ -622,18 +622,18 @@ input[type="range"]::-moz-range-thumb { border-radius: 50%; background: var(--te
 #chatLog.history-collapsed { display: none; }
 #answersToggle { flex: none; margin: 4px 16px; text-align: left; font-size: 11px; }
 #answersToggle[hidden] { display: none; }
-.exam-testing #testCard { max-height: none; height: min(440px, 67%); overflow: hidden; flex-shrink: 0; }
+.exam-testing #testCard { max-height: none; height: 350px; overflow: hidden; flex-shrink: 0; }
 .exam-testing #testCard::after { display: none; }
 .exam-testing #chatForm { margin-top: auto; }
 .how-it-works { margin-top: 24px; }
-.how-it-works h3 { font-size: 17px; font-weight: 500; letter-spacing: -.4px; }
+.how-it-works h3 { font-size: 17px; font-weight: 600; letter-spacing: -.4px; }
 .how-it-works ol { padding: 0; list-style: none; counter-reset: steps; }
 .how-it-works li { counter-increment: steps; display: grid; grid-template-columns: 24px 1fr; gap: 3px 8px; padding: 16px 0; border-top: 1px solid var(--line); }
 .how-it-works li::before { content: "0" counter(steps); grid-row: span 2; font-size: 10px; color: var(--muted); }
 .how-it-works b { font-size: 12px; font-weight: 500; }
 .how-it-works span, .how-it-works p { font-size: 11px; color: var(--muted); }
 .composer:has(input:disabled) { background: #f7f7f5; }
-#movementTarget { position: absolute; z-index: 4; left: 50%; bottom: 238px; transform: translateX(-50%); background: #ffffffeb; border: 1px solid var(--line); border-radius: 20px; padding: 7px 12px; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#movementTarget { position: absolute; z-index: 4; left: 50%; bottom: 7px; transform: translateX(-50%); background: #ffffffeb; border: 1px solid var(--line); border-radius: 20px; padding: 5px 12px; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 #movementTarget[hidden] { display: none; }
 #toasts { z-index: 29; }
 .toast { max-width: 100%; width: max-content; }
@@ -665,51 +665,117 @@ body:has(.modal.show) #mobileStart { display: none; }
 @media (min-width: 1025px) {
   #readoutStrip { bottom: 140px; min-height: 82px; }
   #three, #stage.demo #three { --reserve: 234px; }
-  #movementTarget { bottom: 292px; }
+  #stage:has(#movementTarget:not([hidden])) #dock { bottom: 35px; }
+  #stage:has(#movementTarget:not([hidden])) #readoutStrip { bottom: 175px; }
 }
 @media (max-width: 700px) {
   #app { padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
   .demo-running .mobile-demo-chip { display: inline-block; padding: 3px 4px; border: 1px solid var(--line); border-radius: 3px; font-size: 8px; color: var(--muted); letter-spacing: .5px; }
   .brand { gap: 4px; }
   .brand-name { font-size: 14px; }
-  #chatPanel { height: 650px; min-height: 0; overflow: hidden; padding-bottom: 0 !important; }
-  #examView { flex: 1; }
-  #chatLog { flex: 1; overflow: auto; padding-top: 18px; padding-bottom: 24px; }
-  .exam-testing #testCard { height: 330px; max-height: 55%; overflow: hidden; flex-shrink: 0; }
-  .tc-body { overflow: auto; min-height: 0; }
+  #chatPanel { height: auto; min-height: 0; overflow: visible; padding-bottom: 0 !important; }
+  #examView { flex: none; overflow: visible; }
+  #chatLog { flex: none; height: 320px; overflow: auto; padding-top: 18px; padding-bottom: 24px; }
+  .exam-testing #testCard { height: auto; max-height: none; overflow: hidden; flex-shrink: 0; }
+  .tc-body { overflow: auto; min-height: 0; max-height: 240px; flex: none; }
   #rehabView { overflow: auto; }
-  .readout-values { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px 0; }
-  .joint-readout { grid-column: span 2; font-size: 9px; padding: 0 5px; }
-  .joint-readout:nth-child(n+4) { grid-column: span 3; }
+  .readout-values { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; }
+  .joint-readout, .joint-readout:nth-child(n+4) { grid-column: auto; font-size: 9px; padding: 8px; border: 0; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .joint-readout:first-child { padding-left: 8px; }
+  .joint-readout:nth-child(3n) { border-right: 0; }
+  .joint-readout:nth-child(n+4) { border-bottom: 0; }
   .joint-readout small { font-size: 8px; margin-left: 3px; }
   .joint-readout strong { font-size: 22px; }
   #movementTarget { bottom: 10px; font-size: 10px; }
   #arcWrap { height: 128px; padding-bottom: 50px; }
   .marker-legend { height: 40px; bottom: 4px; left: 12px; gap: 8px; align-items: center; font-size: 9px; }
-  #timelineSide { min-height: 40px; min-width: 54px; margin-left: auto; font-size: 9px; }
+  #timelineSide { min-height: 32px; min-width: 64px; margin-left: auto; font-size: 10px; }
   #stage:has(#movementTarget:not([hidden])) #demoLabel { display: none; }
   #stage.camera-error #camEmpty { gap: 6px; }
   #cameraRecovery { max-width: 350px; font-size: 11px; }
   #cameraRecovery .welcome-actions { flex-wrap: wrap; gap: 6px; }
   #cameraRecovery .btn { font-size: 11px; padding: 0 9px; }
-  body.quick-in-view #mobileStart { display: none; }
+  body.quick-in-view #mobileStart, body.rehab-active #mobileStart { display: none; }
   body:not(.demo-running):not(.exam-running) .exam-start-quick { display: inline-flex; }
   #reportModal .modal-head { padding-bottom: 8px !important; }
   .rp-stat-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
   .rp-stat { padding: 12px; gap: 9px; }
   .rp-stat strong { font-size: 22px; }
-  .rp-hero-visuals { grid-template-columns: 1fr 1fr; gap: 4px; align-items: center; }
+  .rp-hero-visuals { grid-template-columns: 1fr; gap: 4px; align-items: end; }
   .rp-motion figcaption { display: block; }
-  .rp-anatomy-plate { width: 100%; aspect-ratio: .7; }
+  .rp-anatomy-plate { width: 100%; aspect-ratio: auto; height: 210px; }
   .rp-anatomy figcaption { font-size: 8px; }
-  .rom-values { padding: 0; margin-top: -6px; }
-  .rom-values strong { font-size: 25px; }
+  .rom-values { padding: 0; margin-top: -52px; }
+  .rom-values strong { font-size: 40px; }
   .rom-values strong.rom-untested { font-size: 10px; line-height: 28px; }
-  .rom-side { font-size: 9px; }
-  .rom-chart text { font-size: 20px; }
+  .rom-side { font-size: 11px; }
+  .rom-chart text { font-size: 14px; }
   .rom-note { font-size: 9px; }
   .rp-marker-timeline { padding-left: 8px; padding-right: 8px; }
   .rp-marker-timeline text { font-size: 19px; }
+}
+#examContext { display: none; }
+#testCard, .chat-head, #examProgress { position: relative; z-index: 2; background: white; }
+#chatLog { clip-path: inset(0); }
+.tc-progress { height: 8px; margin: 18px 0 8px; }
+#testCard.answering .tc-progress { display: none; }
+#stage.camera-error #three { opacity: .06; }
+#timelineSide { display: inline-flex; gap: 1px; border: 1px solid var(--line); border-radius: 20px; padding: 2px; background: white; }
+#timelineSide span { padding: 3px 8px; border-radius: 12px; color: var(--muted); line-height: 1.2; }
+#timelineSide span.selected { background: var(--text); color: white; }
+#timelineSide[aria-pressed="true"] { background: white; box-shadow: none; }
+details > summary::after { width: 6px; height: 6px; flex-basis: 6px; background: none; clip-path: none; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(-45deg); margin-right: 5px; }
+details[open] > summary::after { transform: rotate(45deg); }
+#reportModal .modal-head > div:first-child { position: static !important; width: auto !important; height: auto !important; overflow: visible !important; clip-path: none !important; min-width: 0; }
+#reportModal .modal-head { justify-content: space-between !important; padding: 13px 32px !important; }
+#reportModal .modal-head h2 { font-size: 17px; letter-spacing: -.5px; }
+#reportModal .modal-head .modal-meta { margin-top: 3px; font-size: 10px; }
+.rp-hero { padding: 24px 0 18px; border-bottom: 0; }
+.rp-hero-context { margin-top: 10px; }
+.rp-hero-status { margin-top: 10px; }
+.rp-hero-visuals { max-width: 760px; margin: 14px auto 0; gap: 0 12px; align-items: end; background: radial-gradient(ellipse at 68% 54%, #ff4f1f06, transparent 62%); }
+.rp-motion { width: 100%; max-width: 410px; padding-bottom: 12px; }
+.rp-anatomy-plate { display: block; height: 300px; aspect-ratio: auto; width: 100%; background: none; overflow: visible; mask-image: none; }
+.rp-anatomy-image { height: 100%; width: 100%; object-fit: contain; }
+.rp-visual-caption { grid-column: 1 / -1; margin: 8px 0 0; padding-top: 10px; border-top: 1px solid var(--line); text-align: center; color: var(--muted); font-size: 10px; }
+.rom-values { display: flex; justify-content: center; gap: 35px; padding: 0 55px; margin-top: -62px; }
+.rom-values strong { font-size: 42px; }
+.rom-untested { margin: 10px 0 0; text-align: center; color: var(--muted); font-size: 10px; }
+.rom-note { margin-top: 6px; }
+.rom-marker path { stroke: var(--accent); stroke-width: 2; }
+.rom-marker circle { stroke: var(--accent); stroke-width: 1.5; fill: white; }
+.rom-marker.calibration { opacity: .3; }
+.rom-marker.calibration path, .rom-marker.calibration circle { stroke: #777772; }
+.rom-marker-key { margin: 8px 0 0; text-align: center; color: var(--muted); font-size: 9px; }
+.rom-marker-key i { display: inline-block; height: 8px; width: 2px; background: var(--accent); margin-right: 4px; }
+.rp-stat { gap: 10px; }
+.rp-stat strong { font-size: 20px; overflow-wrap: anywhere; }
+.rp-stat small { font-size: 10px; color: var(--muted); line-height: 1.5; }
+.rp-range-caveat { margin: 12px 0 0; font-size: 10px; }
+.rp-markers li.calibration { opacity: .6; }
+@media (max-width: 700px) {
+  #sourceMenuButton { min-width: 54px; color: var(--text); border: 1px solid var(--line); height: 32px; min-height: 32px; border-radius: 5px; margin: 6px 0; }
+  #examContext { position: sticky; top: calc(40vh + 56px); z-index: 19; display: none; flex: none; padding: 12px; background: white; border-bottom: 1px solid var(--line); box-shadow: 0 -3px 0 white; scroll-margin-top: calc(40vh + 56px); }
+  .exam-running #examContext { display: grid; gap: 5px; }
+  .context-step { font-size: 10px; color: var(--muted); }
+  .context-question { font-size: 14px; font-weight: 600; line-height: 1.3; }
+  .exam-running #examProgress, .exam-running #testCard:not(.safety-card) .tc-head, .exam-running #testCard.intake { display: none; }
+  .exam-running:not(.exam-testing):not(.safety-stopped) #chatLog { height: auto; max-height: 300px; min-height: 100px; }
+  .exam-running:not(.exam-testing):not(.safety-stopped) #chatLog > .msg:not(.current-prompt) { display: none; }
+  .exam-running .current-prompt .prompt-copy, .exam-running .current-prompt .avatar { display: none; }
+  .exam-running .current-prompt .bubble { width: 100%; }
+  #rehabView { scroll-margin-top: calc(40vh + 56px); max-height: 420px; }
+  .rp-hero-visuals { grid-template-columns: 1fr; margin-top: 18px; gap: 8px; }
+  .rp-motion { max-width: none; }
+  .rom-values { margin-top: -57px; padding: 0 50px; }
+  .rom-values strong { font-size: 40px; }
+  .rp-anatomy-plate { height: 215px; }
+  #reportModal .modal-head { padding: 10px 14px !important; gap: 8px; }
+  #reportModal .modal-head h2 { font-size: 14px; }
+  #reportModal .modal-head .modal-meta { font-size: 9px; max-width: 115px; line-height: 1.4; }
+  #reportModal .modal-actions { gap: 3px; }
+  #reportModal .modal-actions .btn { padding-left: 8px; padding-right: 8px; font-size: 10px; }
+  .rp-stat strong { font-size: 18px; }
 }
 @media (hover: none), (pointer: coarse) { kbd, .keyboard-tip { display: none !important; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }

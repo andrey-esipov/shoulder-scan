@@ -85,9 +85,14 @@ renderReport(container, {
 });
 assert.match(container.innerHTML, /Worth ruling out/);
 assert.match(container.innerHTML, /Weak evidence/);
-assert.match(container.innerHTML, /rom-untested">Not tested/);
+assert.match(container.innerHTML, /rom-untested[^>]*>L · Left not tested/);
 assert.ok(container.innerHTML.indexOf('What we found') < container.innerHTML.indexOf('Worth ruling out'), 'findings tiles precede hypotheses');
-assert.match(container.innerHTML, /Symptoms by arm angle/);
+assert.doesNotMatch(container.innerHTML, /Symptoms by arm angle/, 'one marker belongs on the gauge, not an empty timeline');
+assert.match(container.innerHTML, /rom-marker/, 'symptoms are overlaid on the gauge');
+assert.match(container.innerHTML, /Pain-free range/);
+assert.match(container.innerHTML, /First symptom angle/);
+assert.match(container.innerHTML, /Strongest test result/);
+assert.match(container.innerHTML, /Top consideration/);
 assert.match(container.innerHTML, /R Pain · 88°/, 'report retains the press-time angle');
 assert.doesNotMatch(container.innerHTML, /rp-summary/, 'inconclusive reports do not repeat the hero summary');
 report.conditions.push({ name: 'Lower likelihood', p: .34 });
@@ -100,12 +105,33 @@ const quick = intakePlan('quick');
 assert.equal(quick.length, 8);
 assert.equal(quick[0].id, 'redFlags');
 assert.ok(intakePlan('full').some(q => q.id === 'deadArm'));
-assert.match(cameraErrorMessage({ name: 'NotAllowedError' }), /^Camera blocked — allow it in the address bar/);
-assert.match(cameraErrorMessage({ name: 'NotFoundError' }), /No camera/);
+assert.match(cameraErrorMessage({ name: 'NotAllowedError' }), /^Allow camera access/);
+assert.match(cameraErrorMessage({ name: 'NotFoundError' }), /^Connect a camera/);
 assert.match(cameraErrorMessage({ name: 'NotReadableError' }), /Teams or Zoom/);
 report.markers = collectMarkers({ startedT: 10, tests: { abd: { markers: [{ type: 'pain', side: 'R', elevation: 85, t: 15 }] } } });
 assert.equal(report.markers[0].elapsed, 5);
 assert.match(report.markers[0].test, /Side raise/);
+const sessionMarks = [
+  { type: 'pain', side: 'R', elevation: 119, elapsed: 9, t: 9, context: 'Demo motion · Forward raise', phase: 'pre-exam' },
+  { type: 'pain', side: 'R', elevation: 12, elapsed: 15, t: 15, test: 'Calibration', calibration: true },
+  { type: 'pain', side: 'R', elevation: 157, elapsed: 22, t: 22, test: 'Forward raise' },
+];
+const retained = collectMarkers({ startedT: 12, sessionMarkers: sessionMarks, tests: { flex: { markers: [] } } });
+assert.deepEqual(retained.map(m => m.elevation), [119, 12, 157], 'session evidence survives exam reset and follow-up reconciliation');
+assert.equal(retained[0].context, 'Demo motion · Forward raise');
+assert.equal(collectMarkers({ sessionMarkers: sessionMarks, freeMarkers: [sessionMarks[0]], tests: { flex: { markers: [sessionMarks[2]] } } }).length, 3, 'canonical and per-test references do not duplicate presses');
+renderReport(container, { ...inconclusive, markers: retained, motion: { forward: { R: 160 } } });
+assert.match(container.innerHTML, /Demo motion · Forward raise/);
+assert.match(container.innerHTML, /Calibration · reference only/);
+assert.match(container.innerHTML, /Symptoms by arm angle/, 'three markers justify a separate timeline');
+assert.match(container.innerHTML, /First symptom angle<\/span><strong>119°/, 'calibration cannot become headline symptom evidence');
+assert.match(container.innerHTML, /0–119°/);
+const withdrawn = { ...sessionMarks[2] }, rec = { markers: [withdrawn], follow: {} };
+reconcilePain(rec, 'pain', false);
+assert.equal(withdrawn.retracted, true);
+renderReport(container, { ...inconclusive, markers: [withdrawn] });
+assert.match(container.innerHTML, /withdrawn during follow-up/);
+assert.match(container.innerHTML, /First symptom angle<\/span><strong>None marked/, 'withdrawn markers cannot re-enter headline evidence');
 assert.equal(reportHeadline(inconclusive), 'No strong screening pattern');
 assert.equal(reportHeadline({ flags: [{ level: 'emergency', text: 'Chest pain or shortness of breath.' }] }), 'Chest pain / shortness of breath');
 assert.equal(reportHeadline({ conditions: [{ name: 'Cuff finding', p: .8 }], summary: 'The leading finding is cuff.' }), 'Cuff finding');
