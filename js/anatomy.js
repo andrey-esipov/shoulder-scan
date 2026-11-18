@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { armFromAngles, clamp, smoothstep } from './metrics.js';
-import { fitAnatomyBounds } from './framing.js';
+import { fitReachEnvelope } from './framing.js';
 import { constrainForearmDirection } from './anatomy-pose.js';
 import {
   buildThorax, buildSkull, buildPelvis, buildClavicle, buildScapula, buildAcromion, buildCoracoid,
@@ -146,7 +146,7 @@ const AC0 = sp(1.6, 4.6, 1.2);
 const ELBOW_H = V(0.3, -29.5, 0.2); // elbow centre in the humerus frame
 const STRUCT = {}; // id -> { id, name, layer, depth, info, meshes: [] }
 
-export function createAnatomy(container, { onHover } = {}) {
+export function createAnatomy(container, { onHover, onReady } = {}) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -546,8 +546,8 @@ export function createAnatomy(container, { onHover } = {}) {
 
   // ---------- Presets & camera ----------
   const PRESETS = {
-    full: { layers: { muscles: 0, nerves: 0, tendons: 0, skin: 0, cuff: .15 }, cam: HOME },
-    muscles: { layers: { skin: 0, muscles: .35, nerves: 0, bones: 1, labrum: 0.3 }, cam: HOME },
+    full: { layers: { muscles: 0, nerves: 0, tendons: 0, skin: .18, cuff: .15 }, cam: HOME },
+    muscles: { layers: { skin: 0, muscles: .35, nerves: 0, bones: 1, labrum: 0.3 }, cam: { pos: V(46, 24, 42), target: V(16, -3, -4) } },
     cuff: { layers: { skin: 0, muscles: 0, cuff: 1, tendons: 0, nerves: 0, labrum: 0.15 }, focus: ['supraspinatus', 'infraspinatus', 'teresMinor', 'subscapularis', 'bursa'],
       cam: { pos: V(46, 24, 42), target: V(16, -3, -4) } },
     labrum: { layers: { skin: 0, muscles: 0, cuff: 0, tendons: 0, nerves: 0, labrum: 1 }, focus: ['labrum', 'slap'],
@@ -567,6 +567,7 @@ export function createAnatomy(container, { onHover } = {}) {
   let tween = null;
   let idleMode = false, activePreset = 'full', regionView = false, panelOpen = false;
   function flyTo(cam, dur = 0.4) {
+    if (cam === HOME) cam = fullCamera();
     const target = cam.target.clone(); target.x *= sideSign;
     const distance = cam.pos.distanceTo(cam.target);
     if (panelOpen && container.clientWidth > 700) target.x -= distance * Math.tan(camera.fov * Math.PI / 360) * 275 / Math.max(1, viewHeight);
@@ -575,7 +576,7 @@ export function createAnatomy(container, { onHover } = {}) {
   }
   function applyPreset(name, { frame = true } = {}) {
     activePreset = name;
-    regionView = frame && !['full', 'muscles', 'bones'].includes(name);
+    regionView = frame && !['full', 'bones'].includes(name);
     const p = PRESETS[name] || PRESETS.full;
     for (const l of LAYERS) layerVal[l.id] = p.layers[l.id] ?? l.def;
     focus = p.focus ? new Set(p.focus) : null;
@@ -618,6 +619,8 @@ export function createAnatomy(container, { onHover } = {}) {
     out.H.makeBasis(x, y, z).setPosition(headW);
     // Forearm
     const elbowW = ELBOW_H.clone().applyMatrix4(out.H);
+    const signedRotation = ((st.rotation + 180) % 360 + 360) % 360 - 180;
+    if (elev > 80 && elev < 100 && st.plane > 80 && st.elbowFlex > 80 && signedRotation < -95) elbowW.z += 7;
     // Both endpoints share the trunk's rigid world transform, so collision tests
     // in this torso frame are invariant under mirroring and torso movement.
     const safeForearm = constrainForearmDirection(elbowW.toArray(), f);
@@ -654,7 +657,8 @@ export function createAnatomy(container, { onHover } = {}) {
     groups2[k] = g;
     groups[k].traverse((o) => {
       if (!o.isMesh || o.material?.userData?.layer === 'muscle' || o.material?.userData?.layer === 'tendon' || o.material?.userData?.layer === 'nerve') return;
-      const c = new THREE.Mesh(o.geometry, o.material);
+      const c = new THREE.Mesh(o.geometry, o.material.clone());
+      mats.push(c.material);
       c.position.copy(o.position); c.quaternion.copy(o.quaternion); c.scale.copy(o.scale);
       c.matrixAutoUpdate = o.matrixAutoUpdate; c.matrix.copy(o.matrix);
       c.renderOrder = o.renderOrder;
@@ -666,7 +670,14 @@ export function createAnatomy(container, { onHover } = {}) {
   function solveOther() {
     armFrames(otherC, frames2);
     for (const k of ['C', 'S', 'H', 'F']) { groups2[k].matrix.copy(frames2[k]); groups2[k].matrixWorldNeedsUpdate = true; }
-    for (const [c, o] of clones) { c.visible = o.visible; c.renderOrder = o.renderOrder; }
+    for (const [c, o] of clones) {
+      c.visible = o.visible && o.material.userData.layer !== 'labrum';
+      c.renderOrder = o.renderOrder;
+      c.material.opacity = o.material.opacity;
+      c.material.transparent = o.material.transparent;
+      if (o.material.userData.baseColor) c.material.color.copy(o.material.userData.baseColor);
+      c.material.emissive?.set(0);
+    }
   }
   solve();
   solveOther();
@@ -707,7 +718,9 @@ export function createAnatomy(container, { onHover } = {}) {
       geo.computeVertexNormals();
       geo.computeBoundingSphere();
       const id = ex.struct === 'cartilage' ? 'thorax' : ex.struct;
-      loaded.push(addMesh(ex.frame, geo, boneMatFor[ex.struct] || boneMatFor[id], id));
+      const mesh = addMesh(ex.frame, geo, boneMatFor[ex.struct] || boneMatFor[id], id);
+      mesh.userData.partName = o.name;
+      loaded.push(mesh);
     });
     if (!loaded.length) return;
     for (const m of proc) { m.parent?.remove(m); m.geometry.dispose(); }
@@ -716,14 +729,19 @@ export function createAnatomy(container, { onHover } = {}) {
     for (const m of loaded) {
       const k = Object.keys(groups).find((g) => groups[g] === m.parent);
       if (!groups2[k]) continue;
-      const c = new THREE.Mesh(m.geometry, m.material);
+      const c = new THREE.Mesh(m.geometry, m.material.clone());
+      mats.push(c.material);
+      c.userData.partName = m.userData.partName;
       c.raycast = () => {};
       groups2[k].add(c);
       clones.push([c, m]);
     }
     applyVisibility();
     solveOther();
-  }, undefined, (err) => console.warn('skeleton.glb failed; keeping procedural bones', err));
+    reachPoints = null;
+    if (!regionView) flyTo(HOME);
+    onReady?.();
+  }, undefined, (err) => { console.warn('skeleton.glb failed; keeping procedural bones', err); onReady?.(); });
 
   // ---------- Stress / strain tint ----------
   const stress = {};
@@ -797,7 +815,7 @@ export function createAnatomy(container, { onHover } = {}) {
   renderer.domElement.addEventListener('pointerleave', onLeave);
 
   // ---------- Loop ----------
-  let raf = 0, last = performance.now(), disposed = false, viewHeight = 1;
+  let raf = 0, last = performance.now(), disposed = false, viewHeight = 1, reachPoints = null;
   let rendererWidth = 0, rendererHeight = 0, rendererReserve = -1;
   function resize() {
     const w = container.clientWidth || 1, h = container.clientHeight || 1;
@@ -816,6 +834,7 @@ export function createAnatomy(container, { onHover } = {}) {
     camera.aspect = w / viewHeight;
     camera.updateProjectionMatrix();
     renderer.render(scene, camera);
+    if (reachPoints && !regionView) flyTo(HOME);
   }
   const ro = new ResizeObserver(resize);
   ro.observe(container);
@@ -829,15 +848,14 @@ export function createAnatomy(container, { onHover } = {}) {
   stageObserver.observe(container.parentElement, { attributes: true, attributeFilter: ['class'] });
   resize();
   const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
-  const stageBounds = new THREE.Box3(), viewBounds = new THREE.Box3();
-  const fitTarget = V(0, -20, 0), corner = V(0, 0, 0), viewDirection = V(0, 0, 1);
-  const inverseView = new THREE.Quaternion();
+  const stageBounds = new THREE.Box3();
+  const fitTarget = V(0, -20, 0), corner = V(0, 0, 0);
   const corePoints = [];
-  function collectCorePoints() {
+  function collectCorePoints(visibleOnly = false) {
     scene.updateMatrixWorld(true);
     let count = 0;
     scene.traverse((mesh) => {
-      if (mesh.isMesh && mesh.material?.userData?.layer === 'bone') {
+      if (mesh.isMesh && mesh.material?.userData?.layer === 'bone' && (!visibleOnly || mesh.visible)) {
         if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
         const box = mesh.geometry.boundingBox;
         for (const x of [box.min.x, box.max.x])
@@ -857,35 +875,24 @@ export function createAnatomy(container, { onHover } = {}) {
     for (const p of corePoints) stageBounds.expandByPoint(corner.copy(p).project(camera));
     return stageBounds;
   }
-  function fitDemo(immediate = false, dt = .016) {
-    const previousPosition = camera.position.clone(), previousTarget = controls.target.clone();
-    collectCorePoints();
-    inverseView.copy(camera.quaternion).invert();
-    viewBounds.makeEmpty();
-    for (const p of corePoints) viewBounds.expandByPoint(corner.copy(p).sub(fitTarget).applyQuaternion(inverseView));
-    let { distance, target: center } = fitAnatomyBounds(viewBounds, camera.aspect, camera.fov);
-    corner.fromArray(center).applyQuaternion(camera.quaternion).add(fitTarget);
-    fitTarget.copy(corner);
-    viewDirection.set(0, 0, 1).applyQuaternion(camera.quaternion);
-    camera.position.copy(fitTarget).addScaledVector(viewDirection, distance);
-    camera.lookAt(fitTarget);
-    // Fit the projected core, not a world-space box padded by its depth.
-    for (let i = 0; i < 3; i++) {
-      const box = projectedCore(), tan = Math.tan(camera.fov * Math.PI / 360);
-      corner.set((box.min.x + box.max.x) / 2 * distance * tan * camera.aspect,
-        (box.min.y + box.max.y) / 2 * distance * tan, 0).applyQuaternion(camera.quaternion);
-      fitTarget.add(corner);
-      distance *= Math.max((box.max.y - box.min.y) / 2 / .86, (box.max.x - box.min.x) / 2 / .90);
-      camera.position.copy(fitTarget).addScaledVector(viewDirection, distance);
-      camera.lookAt(fitTarget);
+  function fullCamera() {
+    if (!reachPoints) {
+      const saved = { cur: { ...cur }, other: { ...otherC }, torso: trunk.rotation.clone() };
+      reachPoints = [];
+      trunk.rotation.set(0, 0, 0);
+      for (const plane of [0, 45, 90])
+        for (const elevation of [0, 45, 90, 135, 180]) {
+          Object.assign(cur, { elevation, plane, rotation: 0, elbowFlex: 0, hike: 0 });
+          Object.assign(otherC, { elevation, plane, rotation: 0, elbowFlex: 0, hike: 0 });
+          solve(); solveOther(); collectCorePoints();
+          reachPoints.push(...corePoints.map(p => p.toArray()));
+        }
+      Object.assign(cur, saved.cur); Object.assign(otherC, saved.other);
+      trunk.rotation.copy(saved.torso); solve(); solveOther();
     }
-    if (immediate) controls.target.copy(fitTarget);
-    else {
-      const k = 1 - Math.exp(-dt * 10);
-      camera.position.lerp(previousPosition, 1 - k);
-      controls.target.lerpVectors(previousTarget, fitTarget, k);
-      camera.lookAt(controls.target);
-    }
+    const fit = fitReachEnvelope(reachPoints, camera.aspect, camera.fov);
+    fitTarget.fromArray(fit.target);
+    return { target: fitTarget.clone(), pos: fitTarget.clone().add(V(0, 0, fit.distance)) };
   }
   function frame(nowMs) {
     if (disposed) return;
@@ -919,7 +926,6 @@ export function createAnatomy(container, { onHover } = {}) {
       if (tween.t >= 1) tween = null;
     }
     controls.update();
-    if (!regionView && !tween) fitDemo(false, dt);
     tint(nowMs / 1000);
     halo.material.opacity = 0.06 + 0.03 * Math.sin(nowMs / 1400);
     renderer.render(scene, camera);
@@ -932,15 +938,14 @@ export function createAnatomy(container, { onHover } = {}) {
       idleMode = on;
       if (on) {
         applyPreset('full', { frame: false });
-        camera.position.set(0, -20, 300);
-        controls.target.set(0, -20, 0);
-        controls.update();
+        flyTo(HOME);
       }
     },
     getFramingMetrics() {
       collectCorePoints();
       const box = projectedCore(), w = container.clientWidth, h = viewHeight;
       return {
+        camera: { position: camera.position.toArray(), target: controls.target.toArray() },
         core: 'Torso, pelvis, shoulders, both arms and fingertips',
         pane: { width: w, height: h },
         bbox: { left: (box.min.x + 1) * w / 2, right: (box.max.x + 1) * w / 2,
@@ -954,9 +959,7 @@ export function createAnatomy(container, { onHover } = {}) {
         tween = null;
         activePreset = 'full';
         regionView = false;
-        controls.target.copy(fitTarget);
-        camera.position.set(0, -20, 300);
-        controls.update();
+        flyTo(HOME);
       } else flyTo((PRESETS[activePreset] || PRESETS.full).cam);
     },
     setPose(p = {}) {
@@ -987,10 +990,17 @@ export function createAnatomy(container, { onHover } = {}) {
     },
     presets: Object.keys(PRESETS),
     setLayerOpacity(id, val) { layerVal[id] = clamp(val, 0, 1); applyVisibility(); },
-    setPeel(val) { peel = clamp(val, 0, 1); applyVisibility(); },
+    setPeel(val) { peel = clamp(val, 0, 1); layerVal.skin = .18; applyVisibility(); },
     setStress,
     getStrain() { return Object.fromEntries(Object.values(STRUCT).map((s) => [s.id, s.strain])); },
-    resetView() { flyTo(HOME); },
+    resetView({ posterior = false } = {}) {
+      const view = fullCamera();
+      if (posterior) {
+        const distance = view.pos.distanceTo(view.target);
+        const pos = view.target.clone().add(V(distance * .5, 0, -distance * .866));
+        tween = { t: 0, dur: .4, p0: camera.position.clone(), t0: controls.target.clone(), p1: pos, t1: view.target };
+      } else flyTo(HOME);
+    },
     snapshot({ crop = false, frame: savedFrame = null } = {}) {
       const saved = savedFrame ? {
         cur: { ...cur, _lastZ: cur._lastZ.clone() }, other: { ...otherC, _lastZ: otherC._lastZ.clone() }, torso: { ...torsoC }, stress: { ...stress },
@@ -998,6 +1008,7 @@ export function createAnatomy(container, { onHover } = {}) {
         layers: { ...layerVal }, focus, ghost, peel, activePreset, regionView, tween, sideSign,
         halo: halo.visible, glows: glows.map(g => [g.glow.visible, g.ring.visible]),
       } : null;
+      const captureHands = [];
       try {
         if (savedFrame) {
           const { other, torso, ...arm } = savedFrame.pose;
@@ -1006,20 +1017,33 @@ export function createAnatomy(container, { onHover } = {}) {
           Object.assign(torsoC, torso || { yaw: 0, flex: 0, lean: 0 });
           root.scale.x = savedFrame.side === 'L' ? -1 : 1;
           applyPreset('full', { frame: false });
-          layerVal.bones = 1; layerVal.cuff = 1; ghost = {};
+          layerVal.bones = 1; layerVal.cuff = 1; layerVal.skin = 0; ghost = {};
           focus = new Set(['supraspinatus', 'infraspinatus', 'teresMinor']);
           applyVisibility();
           Object.assign(stress, savedFrame.stress);
           trunk.rotation.set(torsoC.flex * DEG2RAD, -torsoC.yaw * DEG2RAD, -torsoC.lean * DEG2RAD, 'YXZ');
           solve(); solveOther();
           camera.position.set(0, -20, 300); controls.target.set(0, -20, 0); controls.update();
-          fitDemo(true);
           tint(performance.now() / 1000);
+          scene.traverse(mesh => {
+            if (!mesh.isMesh) return;
+            if (mesh.material?.userData.layer === 'bone') {
+              mesh.material.color.setHex(0xd8d8d2);
+              mesh.material.emissive.set(0);
+              if (mesh.material.userData.emphasis) mesh.material.userData.emphasis.value = 0;
+              mesh.material.opacity = 1;
+              mesh.material.transparent = false;
+              mesh.material.depthWrite = true;
+            }
+            if (/^hand(?:_|$)/i.test(mesh.userData.partName || '')) {
+              captureHands.push([mesh, mesh.visible]); mesh.visible = false;
+            }
+          });
           halo.visible = false;
           for (const g of glows) { g.glow.visible = false; g.ring.visible = false; }
         }
         if (crop && savedFrame) {
-          collectCorePoints();
+          collectCorePoints(true);
           const box = new THREE.Box3().setFromPoints(corePoints);
           const w = 900, h = 1170, aspect = w / h;
           const height = Math.max(box.max.y - box.min.y, (box.max.x - box.min.x) / aspect) / .94;
@@ -1059,6 +1083,7 @@ export function createAnatomy(container, { onHover } = {}) {
         image.getContext('2d').drawImage(source, x, y, w, h, 0, 0, image.width, image.height);
         return image.toDataURL('image/webp', .9);
       } finally {
+        for (const [mesh, visible] of captureHands) mesh.visible = visible;
         if (saved) {
           Object.assign(cur, saved.cur); Object.assign(otherC, saved.other); Object.assign(torsoC, saved.torso);
           Object.assign(stress, saved.stress); Object.assign(layerVal, saved.layers);

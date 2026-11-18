@@ -10,3 +10,14 @@ export function fitAnatomyBounds(bounds, aspect, fov = 36) {
     distance: Math.max(halfWidth / (tan * Math.max(.1, aspect) * .96), halfHeight / (tan * .84)) + depth,
   };
 }
+
+export function fitReachEnvelope(points, aspect, fov = 36) {
+  const y = points.map(p => p[1]);
+  const target = [0, (Math.min(...y) + Math.max(...y)) / 2, 0];
+  const tan = Math.tan(fov * Math.PI / 360);
+  const distance = Math.max(...points.map(p => Math.max(
+    Math.abs(p[0]) / (tan * Math.max(.1, aspect) * .96),
+    Math.abs(p[1] - target[1]) / (tan * .94)
+  ) + p[2]));
+  return { target, distance };
+}

@@ -171,9 +171,9 @@ export class ArcChart {
         ctx.restore();
         continue;
       }
-      ctx.translate(glyphX - 7, glyphY - drop - 7);
-      ctx.scale(14 / 24, 14 / 24);
-      ctx.strokeStyle = c; ctx.lineWidth = 1.8; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.translate(glyphX - 9, glyphY - drop - 7);
+      ctx.scale(18 / 24, 18 / 24);
+      ctx.strokeStyle = c; ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       ctx.stroke(new Path2D(MARK_PATHS[m.type] || MARK_PATHS.pain));
       ctx.restore();
       ctx.shadowBlur = 0;

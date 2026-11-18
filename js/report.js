@@ -1,5 +1,5 @@
 // Report rendering: HTML view, plain-text export, JSON download. No external deps.
-import { phaseTitle, formatValue, reportDate } from './experience.js';
+import { phaseTitle, formatValue, reportDate, reportHeadline, displayReport } from './experience.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const md = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
@@ -11,8 +11,14 @@ const nerveReferral = 'Referral: arrange a clinical assessment of your neck and 
 const flagText = f => String(f.text || '').replace(/\s*Call emergency services now\.?/gi, '').trim();
 function summaryText(report) {
   if (arr(report.flags).some(f => f.level === 'emergency')) return 'Do not continue movement testing. Exercises are paused until a clinician clears you.';
-  return String(report.summary || '').replace(/^Ask a clinician about your neck\s*\/\s*nerves\.\s*Arrange an assessment for numbness, tingling or pain past the elbow\.\s*/i, '');
+  if (!arr(report.flags).length && (report.nerveReferral || reportHeadline(report) === 'Incomplete screening'))
+    return displayReport(report, report.completion || {}).summary;
+  return String(report.summary || '');
 }
+const plain = text => String(text || '')
+  .replace(/\bsubacromial pain\b/gi, 'pain under the bony roof of the shoulder')
+  .replace(/\bsubacromial\b/gi, 'subacromial (under the bony roof of the shoulder)')
+  .replace(/\bAC(?: joint)?\b/g, 'AC joint (outer collarbone joint)');
 
 function labelClass(label) {
   const l = String(label || '').toLowerCase();
@@ -28,7 +34,7 @@ function section(title, body, { open = true, count = null } = {}) {
 
 function evList(items, cls, title, emptyText) {
   const list = arr(items).map(txt).filter(Boolean);
-  const lis = list.length ? list.map((t) => `<li>${esc(t)}</li>`).join('') : `<li class="none">${esc(emptyText)}</li>`;
+  const lis = list.length ? list.map((t) => `<li>${esc(plain(t))}</li>`).join('') : `<li class="none">${esc(emptyText)}</li>`;
   return `<div class="${cls}"><h5>${esc(title)}</h5><ul>${lis}</ul></div>`;
 }
 
@@ -36,9 +42,9 @@ function condCard(c, { top = false, driver = false } = {}) {
   const lc = labelClass(c.label);
   const w = Math.max(2, Math.min(100, Math.round((Number(c.p) || 0) * 100)));
   return `<article class="rp-cond${top ? ' top' : ''}${driver ? ' driver' : ''}" data-id="${esc(c.id)}">
-    <div class="rp-cond-head"><span class="rp-cond-name">${esc(c.name)}</span><span class="badge ${lc}">${strength(c.p)} evidence</span></div>
+    <div class="rp-cond-head"><span class="rp-cond-name">${esc(plain(c.name))}</span><span class="badge ${lc}">${strength(c.p)} evidence</span></div>
     ${c.p >= .5 ? `<div class="rp-prob ${lc}" aria-hidden="true"><div class="bar"><i style="width:${w}%"></i></div></div>` : ''}
-    ${c.blurb ? `<p class="rp-blurb">${esc(c.blurb)}</p>` : ''}
+    ${c.blurb ? `<p class="rp-blurb">${esc(plain(c.blurb))}</p>` : ''}
     ${driver ? '' : `<div class="rp-ev">${evList(c.for, 'for', 'Supports', 'Nothing specific yet')}${evList(c.against, 'against', 'Against', 'Nothing against yet')}</div>`}
   </article>`;
 }
@@ -86,21 +92,22 @@ function motionChart(motion = {}, simulated = false) {
 function reportHero(report) {
   const lead = arr(report.conditions).slice().sort((a, b) => (b.p || 0) - (a.p || 0))[0];
   const title = report.nerveReferral ? 'Ask a clinician about your neck / nerves'
-    : lead?.p >= .35 ? lead.name.replace(/\s*\([^)]*\)/g, '') : 'No strong screening pattern';
+    : reportHeadline(report).replace(/\s*\([^)]*\)/g, '');
+  const incomplete = title === 'Incomplete screening';
   const image = /^data:image\/(?:png|webp);base64,[A-Za-z0-9+/=]+$/.test(report.anatomySnapshot || '')
     ? `<img class="rp-anatomy-image" src="${esc(report.anatomySnapshot)}" alt="3D anatomy captured from this screening session">`
     : '<div class="rp-anatomy-empty">No anatomy snapshot saved for this session.</div>';
   const completion = report.completion;
-  const imageLabel = report.anatomyCapture?.kind === 'forward-raise-peak' ? 'Forward raise · peak elevation' : 'Session anatomy';
+  const imageLabel = report.anatomyCapture?.kind === 'bilateral-forward-peaks' ? 'Forward raise · composite of recorded peaks' : 'Session anatomy';
   return `<section class="rp-hero">
     <div class="rp-brand"><svg viewBox="0 0 32 32" width="23" height="23" aria-hidden="true"><circle cx="9" cy="23" r="7"/><circle cx="23" cy="9" r="7"/></svg><span>Shoulder Scan</span><time>${esc(new Date(report.generatedAt || Date.now()).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }))}</time></div>
     <h3 class="rp-hero-title">${esc(title)}</h3>
-    <p class="rp-hero-context">${report.nerveReferral ? nerveReferral : lead?.p >= .35 ? 'A screening finding to explore with a clinician, not a diagnosis.' : 'The screen is inconclusive. A clinician can help you understand your symptoms.'}</p>
+    <p class="rp-hero-context">${report.nerveReferral ? nerveReferral : incomplete ? `Possible: ${esc(lead?.name || 'not enough evidence yet')}. Finish the exam before drawing conclusions.` : lead?.p >= .35 ? 'A screening finding to explore with a clinician, not a diagnosis.' : 'The screen is inconclusive. A clinician can help you understand your symptoms.'}</p>
     <div class="rp-hero-status">${completion?.simulated ? '<span class="rp-simulated">Simulated demo · Not a clinical result</span>' : '<span>Camera angles are estimates</span>'}${completion && completion.completed < completion.total ? `<span>Partial exam: ${completion.completed} of ${completion.total} tests. Results are provisional.</span>` : ''}</div>
     <div class="rp-hero-visuals">${motionChart(report.motion, completion?.simulated)}
-      <figure class="rp-anatomy"><div class="rp-anatomy-plate">${image}</div><figcaption>${imageLabel}${completion?.simulated ? ' · simulated' : ''}<span>Saved with this session</span></figcaption></figure>
+      <figure class="rp-anatomy"><div class="rp-anatomy-plate">${image}</div><figcaption>${imageLabel}${completion?.simulated ? ' · simulated' : ''}</figcaption></figure>
     </div>
-    <p class="rp-hero-credit">Screening aid, not a diagnosis.<br>Bones: BodyParts3D © DBCLS · CC BY-SA 2.1 JP</p>
+    <p class="rp-hero-credit">Screening aid, not a diagnosis.</p>
   </section>`;
 }
 
@@ -149,7 +156,7 @@ export function renderReport(container, report) {
     out.push(`<div class="rp-flags">${flags.map((f) => `<div class="rp-flag ${esc(f.level)}">${f.level === 'emergency' ? '<strong>Call emergency services now</strong><a href="tel:911">Call 911 / your local emergency number</a>' : `<strong>${esc(lvlName[f.level] || 'Get checked')}</strong>`}<span>${esc(flagText(f))}</span></div>`).join('')}</div>`);
   }
 
-  if (report.summary) out.push(section('Summary', `<p class="rp-summary">${md(summaryText(report))}</p>${report.painReconciliation ? `<p class="rp-reconciliation">${esc(report.painReconciliation)}</p>` : ''}`));
+  if (report.summary) out.push(section('Summary', `<p class="rp-summary">${md(plain(summaryText(report)))}</p>${report.painReconciliation ? `<p class="rp-reconciliation">${esc(report.painReconciliation)}</p>` : ''}`));
 
   const conds = (flags.length ? [] : arr(report.conditions)).slice().sort((a, b) => (b.p || 0) - (a.p || 0));
   if (conds.length) {
@@ -196,9 +203,9 @@ export function renderReport(container, report) {
     ? `<ul class="rp-list found">${found.map((s) => `<li>${md(s)}</li>`).join('')}</ul>`
     : `<p class="rp-muted" style="margin:0">${completion?.simulated ? 'Demo movements are simulated, not measured.' : 'No camera measurements recorded yet.'}</p>`, { open: false, count: found.length || null }));
 
-  out.push(`<p class="rp-foot">${completion?.simulated ? 'Demo motion and angles are simulated, not clinical measurements.' : 'Educational screening from a conversation and camera, not a medical diagnosis. Camera angles are estimates, not clinical measurements.'} See a sports-medicine doctor or physiotherapist in person for injuries, severe or worsening pain, weakness, numbness, or instability.</p>`);
+  out.push(`<p class="rp-foot">${completion?.simulated ? 'Demo motion and angles are simulated, not clinical measurements.' : 'Educational screening from a conversation and camera, not a medical diagnosis. Camera angles are estimates, not clinical measurements.'} See a sports-medicine doctor or physiotherapist in person for injuries, severe or worsening pain, weakness, numbness, or instability.<br>Bones: BodyParts3D © DBCLS · CC BY-SA 2.1 JP</p>`);
 
-  container.innerHTML = `<div class="report"><div class="print-brand">Shoulder Scan · ${esc(reportDate(report.generatedAt))}</div>${out.join('')}<p class="print-brand">Bones: BodyParts3D © DBCLS · CC BY-SA 2.1 JP</p></div>`;
+  container.innerHTML = `<div class="report">${flags.length ? `<div class="print-brand">Shoulder Scan · ${esc(reportDate(report.generatedAt))}</div>` : ''}${out.join('')}</div>`;
 }
 
 export function reportToText(report) {

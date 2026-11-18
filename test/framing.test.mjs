@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { fitAnatomyBounds } from '../js/framing.js';
+import { fitAnatomyBounds, fitReachEnvelope } from '../js/framing.js';
 
 for (const aspect of [1.9, 1, .7]) {
   for (const bounds of [
@@ -27,3 +27,14 @@ for (const aspect of [1.9, .83]) {
   assert.ok(occupancy >= .78 && occupancy <= .86, `torso fills stage at ${aspect}: ${occupancy}`);
 }
 console.log('framing: core fills stage; full arm and fingertip span fits desktop and narrow views');
+
+const reach = [[-90, -15, 0], [90, -15, 0], [-16, 104, 0], [16, 104, 0], [0, -88, 0], [0, 0, 75]];
+for (const aspect of [1.9, .8]) {
+  const { distance, target } = fitReachEnvelope(reach, aspect);
+  for (const [x, y, z] of reach) {
+    const height = (distance - z) * Math.tan(36 * Math.PI / 360);
+    assert.ok(Math.abs(x - target[0]) < height * aspect, 'maximum side reach fits');
+    assert.ok(Math.abs(y - target[1]) < height, 'overhead and lowered hands fit');
+  }
+  assert.deepEqual(fitReachEnvelope(reach, aspect), { distance, target }, 'fixed envelope has one deterministic framing');
+}

@@ -2,9 +2,14 @@ import assert from 'node:assert/strict';
 import { TESTS } from '../js/protocol.js';
 import { RepCounter, coachTarget } from '../js/rehab.js';
 import { constrainForearmDirection, insideBody } from '../js/anatomy-pose.js';
-import { demoTestPose, displayReport, formatValue, phaseTitle, intakePlan, cameraErrorMessage, collectMarkers, reportHeadline, reconcilePain, reportMotion, painArcEvidence, localDate } from '../js/experience.js';
+import { demoTestPose, demoPeakPose, displayReport, formatValue, phaseTitle, intakePlan, cameraErrorMessage, collectMarkers, reportHeadline, reconcilePain, reportMotion, painArcEvidence, localDate } from '../js/experience.js';
 import { renderReport, reportToText } from '../js/report.js';
 import { armFromAngles } from '../js/metrics.js';
+
+assert.equal(demoPeakPose(TESTS.find(t => t.id === 'flex')).elevation, 145);
+assert.equal(demoPeakPose(TESTS.find(t => t.id === 'abd')).elevation, 145);
+assert.equal(demoPeakPose(TESTS.find(t => t.id === 'obrien'), 'thumbDown').rotation, -90);
+assert.equal(demoPeakPose(TESTS.find(t => t.id === 'obrien'), 'palmUp').rotation, 90);
 
 for (const test of TESTS.filter(t => t.mode !== 'manual')) {
   const pose = demoTestPose(test, 1);
@@ -47,6 +52,7 @@ for (const [elbow, direction] of [[[2, 0, 20], [0, 1, -.4]], [[20, -20, 0], [-1,
 assert.notEqual(demoTestPose(TESTS.find(t => t.id === 'flex'), 1).plane, demoTestPose(TESTS.find(t => t.id === 'abd'), 1).plane);
 assert.equal(demoTestPose(TESTS.find(t => t.id === 'palpate'), 0), null);
 const report = displayReport({ conditions: [{ name: 'Labral irritation', p: .7 }], summary: 'calm the tendon', plan: [], flags: [] }, { completed: 2, total: 8, simulated: true });
+assert.equal(reportHeadline(report), 'Incomplete screening', 'few tests must not produce a diagnosis headline');
 assert.match(report.summary, /Labral irritation/);
 assert.doesNotMatch(report.summary, /calm the tendon/);
 assert.deepEqual(report.completion, { completed: 2, total: 8, simulated: true });
@@ -72,7 +78,7 @@ const quick = intakePlan('quick');
 assert.equal(quick.length, 8);
 assert.equal(quick[0].id, 'redFlags');
 assert.ok(intakePlan('full').some(q => q.id === 'deadArm'));
-assert.match(cameraErrorMessage({ name: 'NotAllowedError' }), /permission/i);
+assert.match(cameraErrorMessage({ name: 'NotAllowedError' }), /^Camera blocked — allow it in the address bar/);
 assert.match(cameraErrorMessage({ name: 'NotFoundError' }), /No camera/);
 assert.match(cameraErrorMessage({ name: 'NotReadableError' }), /Teams or Zoom/);
 report.markers = collectMarkers({ startedT: 10, tests: { abd: { markers: [{ type: 'pain', side: 'R', elevation: 85, t: 15 }] } } });
@@ -96,9 +102,15 @@ assert.match(reportToText(emergency), /Call emergency services now/);
 renderReport(container, { ...report, completion: { simulated: false } });
 assert.doesNotMatch(container.innerHTML, /±10|accuracy/i);
 const nerve = displayReport({ conditions: [], nerveReferral: true }, { completed: 8, total: 8 });
-assert.doesNotMatch(nerve.summary, /Ask a clinician about your neck \/ nerves/);
+assert.match(nerve.summary, /^Ask a clinician about your neck \/ nerves/);
+assert.equal(reportHeadline({ ...nerve, conditions: [{ name: 'Cuff finding', p: .8 }] }), 'Neck/nerve referral');
 renderReport(container, nerve);
 assert.match(container.innerHTML, /Referral:.*neck and nerves/);
+renderReport(container, { ...nerve, conditions: [{ name: 'Cuff finding', p: .8 }], summary: 'The leading screening finding is Cuff finding.' });
+assert.match(container.innerHTML, /rp-summary">Ask a clinician about your neck \/ nerves/);
+assert.match(container.innerHTML, /secondary shoulder finding to discuss/);
+renderReport(container, { ...report, summary: 'The leading screening finding is Labral irritation.' });
+assert.match(container.innerHTML, /rp-summary">Incomplete screening\. Possible:/);
 assert.match(reportToText(nerve), /Referral:.*neck and nerves/);
 const noPain = { markers: [{ type: 'pain', elevation: 71 }, { type: 'click' }], follow: { arc: 'none' } };
 reconcilePain(noPain, 'arc', false);
@@ -155,10 +167,10 @@ assert.equal(painArcEvidence({ follow: {}, markers: [{ type: 'pain', elevation: 
 renderReport(container, emergency);
 assert.equal((container.innerHTML.match(/Call emergency services now/g) || []).length, 1, 'emergency heading is not repeated in summary');
 renderReport(container, nerve);
-assert.equal((container.innerHTML.match(/Ask a clinician about your neck/g) || []).length, 1);
+assert.equal((container.innerHTML.match(/Ask a clinician about your neck/g) || []).length, 2, 'hero and summary both open with the referral');
 renderReport(container, { ...emergency, summary: 'Call emergency services now. Do not continue movement testing.',
   flags: [{ level: 'emergency', text: 'Chest pain. Call emergency services now.' }] });
 assert.equal((container.innerHTML.match(/Call emergency services now/g) || []).length, 1, 'older saved safety reports also deduplicate emergency copy');
 renderReport(container, { ...nerve, summary: 'Ask a clinician about your neck / nerves. Arrange an assessment for numbness, tingling or pain past the elbow. No strong screening pattern was found.' });
-assert.equal((container.innerHTML.match(/Ask a clinician about your neck/g) || []).length, 1, 'older saved nerve reports also keep referral copy in the hero only');
+assert.equal((container.innerHTML.match(/Ask a clinician about your neck/g) || []).length, 2, 'older saved nerve reports retain referral-first summaries');
 console.log('experience: test-specific demo, report provenance and readable values pass');

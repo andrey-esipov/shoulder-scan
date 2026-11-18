@@ -23,8 +23,8 @@ export function intakePlan(mode) {
 export const pullingQuestion = () => pullDetail;
 export function cameraErrorMessage(error) {
   const name = error?.name || error?.cause?.name;
-  if (['NotAllowedError', 'SecurityError'].includes(name)) return 'Camera permission is blocked. Allow camera access in your browser settings, then try again.';
-  if (['NotFoundError', 'OverconstrainedError'].includes(name)) return 'No camera was found. Connect a camera, then try again, or use Demo.';
+  if (['NotAllowedError', 'SecurityError'].includes(name)) return 'Camera blocked — allow it in the address bar, then try again.';
+  if (['NotFoundError', 'OverconstrainedError'].includes(name)) return 'No camera found. Connect a camera, then try again, or use Demo.';
   if (['NotReadableError', 'AbortError'].includes(name)) return "Couldn't start the camera. It may be in use by Teams or Zoom.";
   if (name === 'TimeoutError') return 'The camera did not respond. Check the browser permission prompt and close other apps using your camera, then try again.';
   return error?.message || "Couldn't start the camera. Check its connection and browser permissions, or use Demo.";
@@ -40,8 +40,10 @@ export function reportHeadline(report) {
   const flag = report?.flags?.[0];
   if (flag && /chest pain|shortness of breath/i.test(flag.text)) return 'Chest pain / shortness of breath';
   if (flag) return String(flag.text || 'Safety concern').split('. ')[0].replace(/\.$/, '');
+  if (report?.nerveReferral) return 'Neck/nerve referral';
+  if (report?.completion?.completed < report?.completion?.total / 2) return 'Incomplete screening';
   const lead = report?.conditions?.slice().sort((a, b) => b.p - a.p)[0];
-  return lead?.p >= .35 ? lead.name : report?.nerveReferral ? 'Neck / nerve referral' : 'No strong screening pattern';
+  return lead?.p >= .35 ? lead.name : 'No strong screening pattern';
 }
 export const localDate = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 export const formatValue = (value, digits = 0) => {
@@ -118,13 +120,31 @@ export function demoTestPose(test, elapsed) {
   return pose;
 }
 
+export function demoPeakPose(test, followField) {
+  const pose = demoTestPose(test, test.id === 'scapClick' ? 7 : 1.8);
+  if (!pose) return null;
+  const gate = test.target || test.rep;
+  if (test.mode === 'reps' && gate) pose[gate.metric] = Math.min(175, gate.up + 25);
+  if (test.id === 'obrien' && followField === 'palmUp') pose.rotation = 90;
+  return pose;
+}
+
 export const phaseTitle = phase => `Phase ${phase.phase} · ${String(phase.title || '').replace(/^Phase \d+\s*[·:]\s*/i, '')}`;
 
 export function displayReport(report, completion) {
-  const lead = report.conditions?.[0];
-  return {
-    ...report, completion,
-    summary: report.flags?.some(f => f.level === 'emergency') ? 'Do not continue movement testing. Exercises are paused until a clinician clears you.'
-      : `${report.stoppedForSafety ? 'Exam stopped. Please contact a clinician before testing.' : report.flags?.length ? 'Get checked before testing. A safety concern needs clinical assessment.' : `${lead?.p >= .35 ? `The leading screening finding is **${lead.name}**.` : 'No strong screening pattern was found.'} ${completion.completed < completion.total ? 'Finish the remaining tests before drawing conclusions. ' : ''}The findings below show the supporting and conflicting evidence. A clinician can assess the cause and help choose a safe, gradual return to activity.`}`,
-  };
+  const lead = report.conditions?.slice().sort((a, b) => (b.p || 0) - (a.p || 0))[0];
+  let summary;
+  if (report.flags?.some(f => f.level === 'emergency'))
+    summary = 'Do not continue movement testing. Exercises are paused until a clinician clears you.';
+  else if (report.stoppedForSafety)
+    summary = 'Exam stopped. Please contact a clinician before testing.';
+  else if (report.flags?.length)
+    summary = 'Get checked before testing. A safety concern needs clinical assessment.';
+  else if (report.nerveReferral)
+    summary = `Ask a clinician about your neck / nerves. Arrange an assessment for symptoms past the elbow.${lead?.p >= .35 ? ` A secondary shoulder finding to discuss is **${lead.name}**.` : ''}`;
+  else if (completion.completed < completion.total / 2)
+    summary = `Incomplete screening.${lead?.p >= .35 ? ` Possible: **${lead.name}**.` : ''} Finish the remaining tests before drawing conclusions.`;
+  else
+    summary = `${lead?.p >= .35 ? `The leading screening finding is **${lead.name}**.` : 'No strong screening pattern was found.'} ${completion.completed < completion.total ? 'Finish the remaining tests before drawing conclusions. ' : ''}The findings below show the supporting and conflicting evidence. A clinician can assess the cause and help choose a safe, gradual return to activity.`;
+  return { ...report, completion, summary };
 }
