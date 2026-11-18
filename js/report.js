@@ -1,6 +1,5 @@
 // Report rendering: HTML view, plain-text export, JSON download. No external deps.
-import { phaseTitle, formatValue, reportDate, reportHeadline, displayReport, activityCopy } from './experience.js';
-import { MARK_PATHS } from './marker-icons.js';
+import { phaseTitle, formatValue, reportDate, reportHeadline, displayReport, activityCopy, sessionSummary, isCalibration } from './experience.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const md = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
@@ -59,7 +58,7 @@ function exItem(it) {
     ? `<button type="button" class="coach-btn" data-ex="${esc(it.id)}" title="Start the live camera rep coach">
         <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="2.5" y="6" width="14" height="12" rx="3"/><path d="m16.5 10 5-3v10l-5-3"/></svg>Coach me</button>`
     : '';
-  const how = it.how ? `<details><summary>How to do it</summary><p>${esc(it.how)}</p></details>` : '';
+  const how = it.how ? `<p class="rp-ex-how">${esc(it.how)}</p>` : '';
   return `<div class="rp-ex">
     <div class="rp-ex-head"><span class="rp-ex-name">${esc(it.name)}</span>${coach}</div>
     ${it.dose ? `<div class="rp-ex-dose">${esc(it.dose)}</div>` : ''}
@@ -68,19 +67,11 @@ function exItem(it) {
   </div>`;
 }
 
-function motionRange(motion = {}) {
-  const forward = motion.forward || {}, side = motion.side || {};
-  const useSide = ![forward.R, forward.L].some(Number.isFinite) && [side.R, side.L].some(Number.isFinite);
-  return { range: useSide ? side : forward, name: useSide ? 'Side raise' : 'Forward raise' };
-}
-const isCalibration = m => m.calibration || /^calibration$/i.test(m.test || '');
-function motionChart(motion = {}, simulated = false, markers = [], preferredSide = 'R') {
+function motionChart(summary) {
   const known = value => Number.isFinite(value) && value >= 0 && value <= 180;
-  const { range, name } = motionRange(motion);
-  const side = known(range[preferredSide]) ? preferredSide : known(range.R) ? 'R' : known(range.L) ? 'L' : 'R', other = side === 'R' ? 'L' : 'R';
+  const { range, name, side, primaryMarker: mark } = summary;
+  const other = side === 'R' ? 'L' : 'R';
   const sideName = side === 'R' ? 'Right' : 'Left', otherName = other === 'R' ? 'Right' : 'Left';
-  const symptoms = markers.filter(m => !isCalibration(m) && !m.retracted && known(m.elevation) && m.side === side);
-  const mark = symptoms.find(m => m.type === 'pain') || symptoms[0];
   let marker = '';
   if (mark) {
     const a = Math.PI + mark.elevation * Math.PI / 180;
@@ -91,7 +82,7 @@ function motionChart(motion = {}, simulated = false, markers = [], preferredSide
   }
   const value = known(range[side]) ? `${Math.round(range[side])}°` : 'Not tested';
   return `<figure class="rp-motion poster-gauge">
-    <figcaption><h4>Peak arm raise</h4><span>${known(range[other]) ? `${otherName} ${Math.round(range[other])}°` : `${otherName} not tested`}${simulated ? ' · simulated' : ''}</span></figcaption>
+    <figcaption><h4>Peak arm raise</h4><span>${known(range[other]) ? `${otherName} ${Math.round(range[other])}°` : `${otherName} not tested`}</span></figcaption>
     <svg class="rom-chart" viewBox="0 0 360 230" role="img" aria-label="Range of motion, ${name.toLowerCase()}: right ${known(range.R) ? `${Math.round(range.R)}°` : 'not tested'}, left ${known(range.L) ? `${Math.round(range.L)}°` : 'not tested'}${mark ? `; symptom marked at ${Math.round(mark.elevation)} degrees` : ''}">
       <path class="rom-track" d="M40 190a140 140 0 0 1 280 0"/>
       ${known(range[side]) ? `<path class="rom-arc" pathLength="180" stroke-dasharray="${range[side]} 180" d="M40 190a140 140 0 0 1 280 0"/>` : ''}
@@ -102,55 +93,55 @@ function motionChart(motion = {}, simulated = false, markers = [], preferredSide
   </figure>`;
 }
 
-function findingsTiles(report) {
-  const markers = arr(report.markers).filter(m => !isCalibration(m) && !m.retracted && Number.isFinite(m.elevation));
-  const first = markers.slice().sort((a, b) => (a.t ?? a.elapsed ?? 0) - (b.t ?? b.elapsed ?? 0))[0];
-  const lead = arr(report.conditions).slice().sort((a, b) => (b.p || 0) - (a.p || 0))[0];
+function findingsTiles(report, summary) {
+  const first = summary.firstSymptom;
   const tests = arr(report.testResults).filter(t => t.result);
   const test = tests.find(t => t.id === 'hawkins') || tests[0];
-  const { range, name } = motionRange(report.motion);
+  const { range, name } = summary;
   const peaks = Object.values(range).filter(Number.isFinite);
   const comparison = Number.isFinite(range.R) && Number.isFinite(range.L);
   const tiles = [
     ['Pain-free range', 'Not established', 'Symptom marks alone cannot establish a pain-free range.'],
-    ['First symptom angle', first ? `${Math.round(first.elevation)}°` : 'None marked', first ? first.context || first.test || 'Free movement' : 'Calibration marks excluded'],
+    ['First symptom angle', first ? `${Math.round(first.elevation)}°` : 'None marked', first ? `${summary.side === 'R' ? 'Right' : 'Left'} ${name.toLowerCase()}` : 'This movement · pre-exam and calibration excluded'],
     [test ? 'Test response' : comparison ? 'Side-to-side' : 'Recorded range', test ? test.result : comparison ? `${Math.round(Math.abs(range.R - range.L))}° difference` : peaks.length ? `${Math.round(Math.max(...peaks))}° ${name.toLowerCase()}` : 'Not measured', test ? test.title : comparison ? `Right ${Math.round(range.R)}° · Left ${Math.round(range.L)}°` : 'Peak recorded movement, not a diagnostic test'],
-    [lead?.p >= .35 ? 'Screening consideration' : 'Worth ruling out', lead?.p >= .35 ? plain(lead.name.replace(/\s*\([^)]*\)/g, '')) : 'No clear lead', lead?.p >= .35 ? `${strength(lead.p)} evidence · discuss with a clinician` : 'Weak evidence. Review the possibilities below with a clinician.'],
   ];
   return `<section class="rp-findings"><h4>What we found</h4><div class="rp-stat-grid">${tiles.map(([label, value, note]) => `<div class="rp-stat"><span>${label}</span><strong>${esc(value)}</strong><small>${esc(note)}</small></div>`).join('')}</div>${report.painReconciliation ? `<p class="rp-reconciliation">${esc(report.painReconciliation)}</p>` : ''}</section>`;
 }
 
-function markerTimeline(markers) {
-  const known = markers.filter(m => Number.isFinite(m.elevation));
-  if (known.length < 3) return '';
-  return `<figure class="rp-marker-timeline"><figcaption>Symptoms by arm angle <span>Elevation · moment of press</span></figcaption><svg viewBox="0 0 640 94" role="img" aria-label="Symptom markers on an elevation axis, from zero to 180 degrees">
-    <path class="marker-axis" d="M24 49H616"/>${[0, 45, 90, 135, 180].map(a => `<path class="marker-axis" d="M${24 + a / 180 * 592} 45v8"/><text x="${24 + a / 180 * 592}" y="80" text-anchor="middle">${a}°</text>`).join('')}
-    ${known.map((m, i) => {
-      const x = 24 + Math.max(0, Math.min(180, m.elevation)) / 180 * 592, y = i % 2 ? 31 : 9;
-      return `<g><title>${esc(markerText(m).label)} · ${esc(markerText(m).context)}</title><path class="marker-stem" d="M${x} ${y + 22}V49"/><svg x="${x - 10}" y="${y}" width="20" height="20" viewBox="0 0 24 24"><path class="marker-glyph" d="${MARK_PATHS[m.type] || MARK_PATHS.pain}"/></svg></g>`;
-    }).join('')}</svg></figure>`;
+function markerStrip(summary) {
+  const groups = [[summary.name, summary.movementMarkers], ['Other exam movements', summary.otherMovements], ['Before exam', summary.beforeExam], ['Reference only', summary.references]].filter(([, marks]) => marks.length);
+  const glyph = { pain: 'P', click: 'C', pull: 'L', unstable: 'U' };
+  return `<section class="rp-marker-strip"><h4>Session marks <span>Elevation at press · P pain / C click / L pull / U unstable</span></h4>${groups.length ? groups.map(([title, marks]) => `<div class="rp-mark-row${title === 'Reference only' ? ' reference' : ''}">
+    <h5>${esc(title)}</h5><div class="rp-pin-axis" role="img" aria-label="${esc(title)}: markers from zero to 180 degrees">
+      ${marks.filter(m => Number.isFinite(m.elevation)).map((m, i) => `<span class="rp-pin${isCalibration(m) || m.retracted ? ' reference' : ''}" style="left:${Math.max(0, Math.min(180, m.elevation)) / 1.8}%;--tier:${i % 2}" title="${esc(markerText(m).label)} · ${esc(markerText(m).context)}"><b>${esc(glyph[m.type] || '·')}</b><small>${Math.round(m.elevation)}°</small></span>`).join('')}
+      <span class="axis-zero">0°</span><span class="axis-middle">90°</span><span class="axis-end">180°</span></div>
+    <p>${marks.map(m => { const { label, context } = markerText(m); return `<span title="${esc(context)}">${esc(label)} · ${esc(context)}</span>`; }).join('')}</p></div>`).join('') : '<p class="rp-muted">No symptom markers recorded.</p>'}
+    ${summary.beforeExam.length ? '<p class="rp-marker-note">Before-exam marks are kept separately; they do not feed the exam gauge or first symptom angle.</p>' : ''}
+  </section>`;
 }
 
-function reportHero(report) {
+function reportHero(report, summary) {
   const lead = arr(report.conditions).slice().sort((a, b) => (b.p || 0) - (a.p || 0))[0];
   const title = report.nerveReferral ? 'Ask a clinician about your neck / nerves'
-    : reportHeadline(report).replace(/\s*\([^)]*\)/g, '');
+    : summary.headline.replace(/\s*\([^)]*\)/g, '');
   const incomplete = title === 'Incomplete screening';
   const image = /^data:image\/(?:png|webp);base64,[A-Za-z0-9+/=]+$/.test(report.anatomySnapshot || '')
     ? `<img class="rp-anatomy-image" src="${esc(report.anatomySnapshot)}" alt="3D anatomy captured from this screening session">`
     : '<div class="rp-anatomy-empty">No anatomy snapshot saved for this session.</div>';
   const completion = report.completion;
-  const imageLabel = report.anatomyCapture?.kind === 'bilateral-forward-peaks' ? 'Anatomy at recorded peak · forward raise' : 'Session anatomy';
+  const imageLabel = report.anatomyCapture?.kind === 'exam-movement-peaks' ? `Recorded ${summary.name.toLowerCase()} · frontal angle illustration`
+    : report.anatomyCapture?.kind === 'bilateral-forward-peaks' ? 'Saved anatomy · forward raise' : 'Session anatomy';
   return `<section class="rp-hero rp-poster">
     <div class="poster-intro"><p class="poster-eyebrow">SHOULDER SCAN / MOVEMENT STUDY</p>
     <h3 class="rp-hero-title">${esc(title)}</h3>
+    <p class="poster-meta"><time>${esc(new Date(report.generatedAt || Date.now()).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }))}</time><span>·</span><span>${summary.side === 'L' ? 'Left' : 'Right'} shoulder</span><span>·</span>${completion?.simulated ? '<span class="rp-simulated">Simulated demo</span>' : '<span>Camera estimate</span>'}</p>
     <p class="rp-hero-context">${report.nerveReferral ? nerveReferral : incomplete ? `Possible: ${esc(lead?.name || 'not enough evidence yet')}. Finish the exam before drawing conclusions.` : lead?.p >= .35 ? 'A screening pattern to explore with a clinician.' : 'No clear pattern emerged. Discuss persistent symptoms with a clinician.'}</p>
-    <div class="rp-hero-status">${completion?.simulated ? '<span class="rp-simulated">Simulated demo · Not a clinical result</span>' : '<span>Camera angles are estimates</span>'}${completion && completion.completed < completion.total ? `<span>Partial exam: ${completion.completed} of ${completion.total} tests. Results are provisional.</span>` : ''}</div>
-    </div><div class="rp-hero-visuals">${motionChart(report.motion, completion?.simulated, arr(report.markers), report.side)}
+    <div class="rp-hero-status">${completion && completion.completed < completion.total ? `<span>Partial exam: ${completion.completed} of ${completion.total} tests. Results are provisional.</span>` : ''}</div>
+    </div><div class="rp-hero-visuals">${motionChart(summary)}
       <figure class="rp-anatomy" aria-label="${esc(imageLabel)}"><div class="rp-anatomy-plate">${image}</div></figure>
     </div>
     <p class="rp-visual-caption">${imageLabel} · orange identifies the screened shoulder, not an injury</p>
-    ${findingsTiles(report)}
+    ${findingsTiles(report, summary)}
   </section>`;
 }
 
@@ -189,10 +180,11 @@ export function renderReport(container, report) {
     return;
   }
   report = reportActivity(report);
+  const summary = sessionSummary(report);
   const out = [];
   const completion = report.completion;
   const flags = arr(report.flags);
-  if (!flags.length) out.push(reportHero(report));
+  if (!flags.length) out.push(reportHero(report, summary));
   else if (completion?.simulated) out.push('<p class="partial-banner">Simulated demo · Not a clinical result. Camera measurements have not been collected.</p>');
 
   if (flags.length) {
@@ -200,36 +192,16 @@ export function renderReport(container, report) {
     out.push(`<div class="rp-flags">${flags.map((f) => `<div class="rp-flag ${esc(f.level)}">${f.level === 'emergency' ? '<strong>Call emergency services now</strong><a href="tel:911">Call 911 / your local emergency number</a>' : `<strong>${esc(lvlName[f.level] || 'Get checked')}</strong>`}<span>${esc(flagText(f))}</span></div>`).join('')}</div>`);
   }
 
-  if (report.summary && (flags.length || report.nerveReferral || reportHeadline(report) === 'Incomplete screening')) out.push(section('Screening context', `<p class="rp-summary">${md(plain(summaryText(report)))}</p>`));
+  if (report.summary && (flags.length || report.nerveReferral || summary.headline === 'Incomplete screening')) out.push(`<p class="rp-summary">${md(plain(summaryText(report)))}</p>`);
+
+  out.push(markerStrip(summary));
 
   const conds = (flags.length ? [] : arr(report.conditions)).slice().sort((a, b) => (b.p || 0) - (a.p || 0));
-  if (conds.length) {
-    const main = conds.filter((c) => (c.p || 0) >= 0.35);
-    const shown = main.length ? main.slice(0, 3) : conds.slice(0, 1);
-    const rest = conds.filter((c) => !shown.includes(c));
-    let body = `<div class="rp-conds">${shown.map((c, i) => condCard(c, { top: i === 0 })).join('')}</div>`;
-    if (rest.length) {
-      body += `<details class="rp-sec rp-more"><summary><span>${rest.length} less likely condition${rest.length > 1 ? 's' : ''}</span></summary><div class="rp-conds">${rest.map((c) => condCard(c)).join('')}</div></details>`;
-    }
-    out.push(section(main.length ? 'What it could be' : 'Worth ruling out', body, { open: false }));
+  const drivers = flags.length ? [] : arr(report.drivers);
+  if (conds.length || drivers.length) {
+    const body = `<div class="rp-conds">${conds.map((c, i) => condCard(c, { top: i === 0 && c.p >= .35 })).join('')}</div>${drivers.length ? `<h4>Possible contributors</h4><p class="rp-muted">Not diagnoses. Inward-rotation deficit means less inward rotation on the sore side.</p><div class="rp-conds">${drivers.map(d => condCard(d, { driver: true })).join('')}</div>` : ''}`;
+    out.push(section('Worth ruling out', body, { open: false }));
   }
-
-  const drivers = (flags.length ? [] : arr(report.drivers)).slice().sort((a, b) => (b.p || 0) - (a.p || 0));
-  if (drivers.length) {
-    out.push(section('Likely drivers', `<p class="rp-muted" style="margin:0 0 8px">Not diagnoses — the reasons the tissue got overloaded. GIRD / IR deficit means less inward rotation on the sore side than the other side.</p><div class="rp-conds">${drivers.map((d) => condCard(d, { driver: true })).join('')}</div>`, { open: false, count: drivers.length }));
-  }
-
-  const allMarkers = arr(report.markers).slice().sort((a, b) => (a.t ?? a.elapsed ?? 0) - (b.t ?? b.elapsed ?? 0));
-  const markers = allMarkers.filter(m => !isCalibration(m) && !m.retracted);
-  const references = allMarkers.filter(m => isCalibration(m) || m.retracted);
-  out.push(section('Your markers', markers.length ? `${markerTimeline(markers)}<ul class="rp-markers">${markers.map(m => {
-    const { label, context } = markerText(m);
-    return `<li><strong>${esc(label)}</strong><span>${esc(context)}</span></li>`;
-  }).join('')}</ul>` : '<p class="rp-muted">No symptom markers recorded.</p>', { count: markers.length, open: false }));
-  if (references.length) out.push(section('Reference marks', `<ul class="rp-markers">${references.map(m => {
-    const { label, context } = markerText(m);
-    return `<li class="calibration"><strong>${esc(label)}</strong><span>${esc(context)}</span></li>`;
-  }).join('')}</ul>`, { count: references.length, open: false }));
 
   const plan = arr(report.plan).filter((ph) => arr(ph.items).length || ph.rule);
   if (plan.length && !flags.length) {
@@ -239,14 +211,12 @@ export function renderReport(container, report) {
       ${ph.rule ? `<p class="rp-phase-rule">${esc(ph.rule)}</p>` : ''}
       <div class="rp-exs">${arr(ph.items).map(exItem).join('')}</div>
     </div>`).join('')}</div>`;
-    out.push(section((conds[0]?.p || 0) < .35 ? 'General movement plan' : 'Rehab plan', body, { open: false }));
+    out.push(section('Movement plan', body, { open: false }));
   }
 
   const serve = (flags.length ? [] : arr(report.serve)).map(txt).filter(Boolean);
-  if (serve.length) out.push(section('Serve modifications', `<ul class="rp-list">${serve.map((s) => `<li>${md(s)}</li>`).join('')}</ul>`, { open: false, count: serve.length }));
-
   const next = (flags.length ? [] : arr(report.next)).map(txt).filter(Boolean);
-  if (next.length) out.push(section('Next steps', `<ol class="rp-list">${next.map((s) => `<li>${md(s)}</li>`).join('')}</ol>${plan.length ? '<button class="btn rp-plan-link" type="button">Open movement plan</button>' : ''}`, { open: false }));
+  if (next.length || serve.length) out.push(section('Next steps', `<ol class="rp-list">${next.map((s) => `<li>${md(s)}</li>`).join('')}</ol>${serve.length ? `<h4>Overhead sport</h4><ul class="rp-list">${serve.map(s => `<li>${md(s)}</li>`).join('')}</ul>` : ''}${plan.length ? '<button class="btn rp-plan-link" type="button">Open movement plan</button>' : ''}`, { open: false }));
 
   out.push(`<p class="rp-foot">Screening aid, not a diagnosis. ${completion?.simulated ? 'Demo motion and angles are simulated, not clinical measurements.' : 'Camera angles are estimates, not clinical measurements.'} See a sports-medicine doctor or physiotherapist in person for injuries, severe or worsening pain, weakness, numbness, or instability.<br>Bones: BodyParts3D © DBCLS · CC BY-SA 2.1 JP</p>`);
 

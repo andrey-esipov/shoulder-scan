@@ -88,6 +88,36 @@ export function reportMotion(exam) {
   return { forward: range('flex'), side: range('abd') };
 }
 
+export const isCalibration = m => m.calibration || m.testId === 'calib' || /^calibration$/i.test(m.test || '');
+
+// Keep the gauge, illustration and findings scoped to the same exam movement.
+// Free-movement and calibration evidence remains visible, but is not a range finding.
+export function sessionSummary(report = {}) {
+  const known = value => Number.isFinite(value) && value >= 0 && value <= 180;
+  const forward = report.motion?.forward || {}, lateral = report.motion?.side || {};
+  const useSide = !Object.values(forward).some(known) && Object.values(lateral).some(known);
+  const testId = useSide ? 'abd' : 'flex', name = useSide ? 'Side raise' : 'Forward raise';
+  const measured = useSide ? lateral : forward;
+  const range = Object.fromEntries(['R', 'L'].map(s => [s, known(measured[s]) ? Math.round(measured[s]) : null]));
+  const markers = (report.markers || []).slice().sort((a, b) => (a.t ?? a.elapsed ?? 0) - (b.t ?? b.elapsed ?? 0));
+  const beforeExam = markers.filter(m => m.phase === 'pre-exam' || m.test === 'Free movement');
+  const references = markers.filter(m => !beforeExam.includes(m) && (isCalibration(m) || m.retracted));
+  const symptoms = markers.filter(m => !beforeExam.includes(m) && !references.includes(m));
+  const movementMarkers = symptoms.filter(m => known(range[m.side]) && known(m.elevation)
+    && (m.testId ? m.testId === testId : m.test ? m.test.toLowerCase() === name.toLowerCase() : m.elevation <= range[m.side]));
+  for (const m of movementMarkers) range[m.side] = Math.max(range[m.side], Math.round(m.elevation));
+  const side = known(range[report.side]) ? report.side : known(range.R) ? 'R' : known(range.L) ? 'L' : report.side === 'L' ? 'L' : 'R';
+  const peak = range[side];
+  const gaugeMarkers = movementMarkers.filter(m => m.side === side && Math.round(m.elevation) <= peak)
+    .map(m => ({ ...m, elevation: Math.round(m.elevation) }));
+  return {
+    headline: reportHeadline(report), testId, name, range, side, peak, markers, gaugeMarkers, movementMarkers,
+    primaryMarker: gaugeMarkers.find(m => m.type === 'pain') || gaugeMarkers[0] || null,
+    firstSymptom: gaugeMarkers[0] || null, beforeExam, references,
+    otherMovements: symptoms.filter(m => !movementMarkers.includes(m)),
+  };
+}
+
 export function painArcEvidence(record = {}, side = 'R') {
   const answer = record.follow?.arc;
   const angles = (record.markers || []).filter(m => m.type === 'pain' && (!m.side || m.side === side))

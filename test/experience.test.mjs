@@ -5,7 +5,31 @@ import { constrainForearmDirection, insideBody } from '../js/anatomy-pose.js';
 import { demoTestPose, demoPeakPose, displayReport, formatValue, phaseTitle, intakePlan, cameraErrorMessage, collectMarkers, reportHeadline, reconcilePain, reportMotion, painArcEvidence, localDate } from '../js/experience.js';
 import { renderReport, reportToText } from '../js/report.js';
 import { armFromAngles } from '../js/metrics.js';
-import { activityCopy } from '../js/experience.js';
+import { activityCopy, sessionSummary } from '../js/experience.js';
+
+const scoped = sessionSummary({
+  side: 'R', motion: { forward: { R: 77, L: null } },
+  markers: [
+    { type: 'pain', side: 'R', elevation: 165, phase: 'pre-exam', context: 'Demo motion · Forward raise' },
+    { type: 'pain', side: 'R', elevation: 12, test: 'Calibration', calibration: true },
+    { type: 'click', side: 'R', elevation: 74, test: 'Forward raise', t: 3 },
+    { type: 'pain', side: 'R', elevation: 144, test: 'Forward raise', t: 4 },
+    { type: 'pull', side: 'R', elevation: 170, test: 'Side raise', t: 5 },
+  ],
+});
+assert.equal(scoped.peak, 144, 'marked frames belong to the recorded peak of their exam movement');
+assert.equal(scoped.beforeExam[0].elevation, 165, 'pre-exam evidence stays separate and unmodified');
+assert.equal(scoped.firstSymptom.elevation, 74);
+assert(scoped.gaugeMarkers.every(m => m.elevation <= scoped.peak), 'no plotted gauge marker can exceed its reported peak');
+assert.equal(scoped.otherMovements[0].elevation, 170, 'a different movement cannot inflate a forward-raise result');
+assert.equal(sessionSummary({ motion: { forward: { R: 77 } }, markers: [scoped.beforeExam[0]] }).firstSymptom, null);
+const fractional = sessionSummary({ side: 'L', motion: { forward: { L: 77 } }, markers: [
+  { type: 'pain', side: 'L', elevation: 77.3, testId: 'flex' },
+  { type: 'pain', side: 'L', elevation: 170, testId: 'calib' },
+] });
+assert.equal(fractional.peak, 77);
+assert(fractional.gaugeMarkers.every(m => m.elevation <= fractional.peak), 'fractional samples use the same whole-degree scale as the gauge');
+assert.equal(fractional.references.length, 1, 'calibration cannot inflate range');
 
 const sportPlan = { plan: [{ rule: 'Keep playing groundstrokes if pain is ≤ 3/10. Add serves 10 at a time.', items: [
   { id: 'intervalServe', name: 'Interval serve program' },
@@ -124,16 +148,21 @@ renderReport(container, { ...inconclusive, markers: retained, motion: { forward:
 assert.match(container.innerHTML, /Demo motion · Forward raise/);
 assert.match(container.innerHTML, /Calibration · reference only/);
 assert.doesNotMatch(container.innerHTML, /Symptoms by arm angle/, 'calibration is not a symptom');
-assert.match(container.innerHTML, /Your markers<span class="rp-count">2/);
-assert.match(container.innerHTML, /Reference marks/);
+assert.match(container.innerHTML, /Session marks/);
+assert.match(container.innerHTML, /Before exam/);
+assert.match(container.innerHTML, /Reference only/);
 assert.equal((container.innerHTML.match(/class="rom-marker"/g) || []).length, 1, 'one primary symptom anchors the gauge');
-assert.match(container.innerHTML, /First symptom angle<\/span><strong>119°/, 'calibration cannot become headline symptom evidence');
+assert.match(container.innerHTML, /First symptom angle<\/span><strong>157°/, 'pre-exam and calibration cannot become headline symptom evidence');
+assert.equal((container.innerHTML.match(/class="rp-stat"/g) || []).length, 3);
+assert.doesNotMatch(container.innerHTML, /<details[^>]*><summary><span>(Your markers|Reference marks)/);
 assert.match(container.innerHTML, /Not established/, 'symptom marks alone cannot prove a pain-free range');
 renderReport(container, { ...inconclusive, testResults: [{ id: 'flex', title: 'Forward raise', symptoms: ['Shoulder blade/lat'] }, { id: 'hawkins', title: 'Hawkins test', result: 'Pain reproduced' }], plan: [{ phase: 1, items: [{ name: 'Comfortable movement' }] }] });
 assert.match(container.innerHTML, /Pain reproduced/);
 assert.match(container.innerHTML, /Hawkins test/);
 assert.doesNotMatch(container.innerHTML, /<strong>Forward raise<\/strong>/);
-assert.match(container.innerHTML, /<details class="rp-sec"><summary><span>General movement plan/);
+assert.match(container.innerHTML, /<details class="rp-sec"><summary><span>Movement plan/);
+renderReport(container, { ...inconclusive, conditions: [], drivers: [{ name: 'Training-load spike', p: .5 }] });
+assert.match(container.innerHTML, /Possible contributors.*Training-load spike/s, 'contributors are retained even without a condition lead');
 const withdrawn = { ...sessionMarks[2] }, rec = { markers: [withdrawn], follow: {} };
 reconcilePain(rec, 'pain', false);
 assert.equal(withdrawn.retracted, true);
@@ -144,7 +173,7 @@ assert.equal(reportHeadline(inconclusive), 'No strong screening pattern');
 assert.equal(reportHeadline({ flags: [{ level: 'emergency', text: 'Chest pain or shortness of breath.' }] }), 'Chest pain / shortness of breath');
 assert.equal(reportHeadline({ conditions: [{ name: 'Cuff finding', p: .8 }], summary: 'The leading finding is cuff.' }), 'Cuff finding');
 renderReport(container, report);
-assert.match(container.innerHTML, /Your markers/);
+assert.match(container.innerHTML, /Session marks/);
 assert.match(container.innerHTML, /85°/);
 assert.match(reportToText(report), /YOUR MARKERS/);
 const emergency = displayReport({ conditions: [{ name: 'Cuff condition', p: .8 }], flags: [{ level: 'emergency', text: 'Chest pain' }], plan: [{ items: [{ name: 'Unsafe drill' }] }], stoppedForSafety: true }, { completed: 0, total: 8 });

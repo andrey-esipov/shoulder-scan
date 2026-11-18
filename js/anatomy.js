@@ -547,7 +547,9 @@ export function createAnatomy(container, { onHover, onReady } = {}) {
   // ---------- Presets & camera ----------
   const PRESETS = {
     full: { layers: { muscles: 0, nerves: 0, tendons: 0, skin: .18, cuff: .35 }, cam: HOME },
-    muscles: { layers: { skin: 0, muscles: .35, nerves: 0, bones: 1, labrum: 0.3 }, cam: { pos: V(46, 24, 42), target: V(16, -3, -4) } },
+    muscles: { layers: { skin: 0, muscles: .28, cuff: .28, nerves: 0, bones: 1, labrum: 0.3 },
+      focus: ['deltAnt', 'deltMid', 'serratus', 'supraspinatus', 'infraspinatus'],
+      cam: { pos: V(46, 24, 42), target: V(16, -3, -4) } },
     cuff: { layers: { skin: 0, muscles: 0, cuff: 1, tendons: 0, nerves: 0, labrum: 0.15 }, focus: ['supraspinatus', 'infraspinatus', 'teresMinor', 'subscapularis', 'bursa'],
       cam: { pos: V(46, 24, 42), target: V(16, -3, -4) } },
     labrum: { layers: { skin: 0, muscles: 0, cuff: 0, tendons: 0, nerves: 0, labrum: 1 }, focus: ['labrum', 'slap'],
@@ -1057,6 +1059,16 @@ export function createAnatomy(container, { onHover, onReady } = {}) {
             const image = document.createElement('canvas'); image.width = w; image.height = h;
             const ctx = image.getContext('2d');
             ctx.drawImage(capture.domElement, 0, 0);
+            const shoulder = new THREE.Vector3().setFromMatrixPosition(groups.H.matrixWorld).project(captureCamera);
+            const x = (shoulder.x + 1) * w / 2, y = (1 - shoulder.y) * h / 2;
+            const angle = Math.round(savedFrame.pose.elevation), radius = 76;
+            const sign = savedFrame.side === 'L' ? -1 : 1;
+            const end = Math.PI / 2 - sign * angle * DEG2RAD;
+            ctx.strokeStyle = '#ff4f1f'; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.arc(x, y, radius, Math.PI / 2, end, sign > 0); ctx.stroke();
+            ctx.fillStyle = '#a83212'; ctx.font = '500 29px sans-serif';
+            ctx.textAlign = sign > 0 ? 'left' : 'right';
+            ctx.fillText(`${angle}°`, x + sign * (radius + 12), y + 12);
             return image.toDataURL('image/webp', .94);
           } finally { capture.dispose(); capture.forceContextLoss(); }
         }

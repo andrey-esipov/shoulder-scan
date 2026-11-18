@@ -11,7 +11,7 @@ import { renderReport, reportToText, downloadJSON } from './report.js';
 import { ArcChart } from './arc-chart.js';
 import { demoTestPose, demoPeakPose, displayReport, formatValue, phaseTitle, intakePlan, pullingQuestion, cameraErrorMessage, collectMarkers, reportHeadline, reconcilePain, reportDate, reportMotion, painArcEvidence, localDate } from './experience.js';
 import { markerIcon } from './marker-icons.js';
-import { activityCopy } from './experience.js';
+import { activityCopy, sessionSummary } from './experience.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -36,21 +36,12 @@ const app = {
 
 /* ---------------- toasts ---------------- */
 let toastTimer;
-function positionToast() {
-  const stage = $('#stage').getBoundingClientRect();
-  $('#toasts').style.left = `${stage.left + stage.width / 2}px`;
-  const reserve = matchMedia('(max-width: 700px)').matches ? 32 : 238;
-  $('#toasts').style.top = `${stage.bottom - reserve - 48}px`;
-  $('#toasts').style.bottom = 'auto';
-  $('#toasts').style.maxWidth = `${stage.width - 24}px`;
-}
 function clearToast() { clearTimeout(toastTimer); $('#toasts').replaceChildren(); }
 function toast(text, kind = '') {
   clearTimeout(toastTimer);
   const t = el('div', `toast ${kind}`, esc(text));
   $('#toasts').replaceChildren(t);
-  positionToast();
-  toastTimer = setTimeout(() => t.remove(), 2500);
+  toastTimer = setTimeout(() => t.remove(), 2000);
 }
 
 /* ---------------- anatomy + left panel ---------------- */
@@ -923,6 +914,8 @@ function renderCard(t, i, n) {
   steps.forEach((s, k) => ol.append(el('li', k === 0 ? 'current' : '', md(s))));
   body.append(ol);
   const questions = el('div'); questions.id = 'testQuestions'; body.append(questions);
+  const goal = t.rep || t.target;
+  body.append(el('div', 'tc-live', `<span>${goal?.metric === 'rotation' ? 'Live rotation' : 'Live arm raise'}</span><strong>—</strong><small>${goal ? `Target ${goal.up ?? goal.min ?? goal.max}° · ${SIDE_NAME[app.side]} shoulder` : 'Move gently within a comfortable range'}</small>`));
   c.append(body);
   const progress = el('div', 'tc-progress');
   progress.setAttribute('role', 'progressbar');
@@ -973,6 +966,8 @@ function examTick(live) {
   const goal = t.rep || t.target;
   const metric = goal?.metric || 'elevation';
   const value = live.sides[app.side]?.[metric];
+  const liveValue = $('.tc-live strong', $('#testCard')), reading = `${fmt(value)}°`;
+  if (liveValue && liveValue.textContent !== reading) liveValue.textContent = reading;
   $('#movementTarget').hidden = !goal;
   if (goal) {
     const target = goal.up ?? goal.min ?? goal.max;
@@ -1207,11 +1202,13 @@ function finishExam() {
   $('#testCard').classList.remove('show');
   $('#hudTitle').textContent = `${SIDE_NAME[app.side]} shoulder`;
   setHold(0, '', false);
-  const peaks = reportMotion(exam).forward;
+  const summary = sessionSummary({ side: affectedSide(exam.intake), motion: reportMotion(exam), markers: collectMarkers(exam) });
+  const peaks = summary.range;
   if (peaks && [peaks.R, peaks.L].some(Number.isFinite)) {
     exam.snapshotPeaks = peaks;
-    const side = affectedSide(exam.intake);
-    const arm = s => ({ elevation: Number.isFinite(peaks[s]) ? peaks[s] : 0, plane: 90, rotation: 0, elbowFlex: 6, hike: 0 });
+    exam.snapshotTest = summary.testId;
+    const side = summary.side;
+    const arm = s => ({ elevation: Number.isFinite(peaks[s]) ? peaks[s] : 0, plane: 0, rotation: 0, elbowFlex: 6, hike: 0 });
     const frame = { side, pose: { ...arm(side), other: arm(other(side)), torso: { yaw: 0, flex: 0, lean: 0 } }, stress: {} };
     try { exam.anatomySnapshot = anatomy.snapshot({ crop: true, frame }); } catch (e) { console.warn('Anatomy snapshot unavailable', e); }
   }
@@ -1271,6 +1268,7 @@ function addMarker(type, src = 'you') {
   const m = { type, side: app.side, elevation: sm?.elevation ?? null, rotation: sm?.rotationValid ? sm.rotation : null, plane: sm?.plane ?? null, src, t: time, elapsed: Math.max(0, time - exam.startedT), recordedAt: new Date().toISOString() };
   m.phase = run.active ? run.test ? 'test' : 'intake' : 'pre-exam';
   m.test = run.active ? run.test?.title || 'Intake' : 'Free movement';
+  m.testId = run.active ? run.test?.id || null : null;
   m.calibration = run.active && run.test?.id === 'calib';
   m.source = app.source;
   m.context = run.active ? m.test : `${app.source === 'demo' ? 'Demo motion' : 'Free movement'}${app.source === 'demo' && app.demoMotion ? ` · ${app.demoMotion}` : ''}`;
@@ -1284,7 +1282,7 @@ function addMarker(type, src = 'you') {
     btn.classList.add('active'); btn.setAttribute('aria-pressed', 'true');
     btn.flashTimer = setTimeout(() => { btn.classList.remove('active'); btn.setAttribute('aria-pressed', 'false'); }, 600);
   }
-  toast(`${MARK_LABEL[type]} marked${sm ? ` at ${displayedAngle}` : ''} · ${SIDE_NAME[app.side]}${m.calibration ? ' · Calibration' : ''}${src === 'mic' ? ' (heard by mic)' : ''}`, type === 'pain' || type === 'unstable' ? 'warn' : '');
+  toast(`${MARK_LABEL[type]} · ${SIDE_NAME[app.side]} · ${sm ? `marked at ${displayedAngle}` : 'marked'}${m.calibration ? ' · Calibration' : ''}${src === 'mic' ? ' (heard by mic)' : ''}`, type === 'pain' || type === 'unstable' ? 'warn' : '');
 }
 $$('#markerBar button[data-marker]').forEach((b) => (b.onclick = () => { addMarker(b.dataset.marker); b.blur(); }));
 document.addEventListener('keydown', (e) => {
@@ -1342,12 +1340,13 @@ function currentReport() {
   report.motion = reportMotion(exam);
   report.anatomySnapshot = exam.anatomySnapshot || null;
   report.anatomyCapture = exam.anatomySnapshot && exam.snapshotPeaks
-    ? { kind: 'bilateral-forward-peaks', peaks: { ...exam.snapshotPeaks }, test: 'flex', width: 900, height: 1170 } : null;
+    ? { kind: 'exam-movement-peaks', peaks: { ...exam.snapshotPeaks }, test: exam.snapshotTest, plane: 0, angleAnnotation: true, width: 900, height: 1170 } : null;
   report.painReconciliation = painArcEvidence(exam.tests.abd, affectedSide(exam.intake)).explanation;
   if (!exam.intake.side && report.flags?.length) report.side = null;
   if (exam.intake.overheadSport !== 'yes') report.serve = [];
   report.overheadSport = exam.intake.overheadSport === 'yes';
   for (const key of ['summary', 'conditions', 'drivers', 'plan', 'next']) report[key] = activityCopy(report[key], report.overheadSport);
+  report.sessionSummary = sessionSummary(report);
   return report;
 }
 let reportReturnFocus = null, reportReturnHistory = false;
@@ -1387,7 +1386,7 @@ function openReport(report) {
   $('#btnPrint').disabled = false; $('#btnExport').disabled = false;
   $('#reportMeta').textContent = report.flags?.length
     ? `Shoulder Scan · ${reportDate(report.generatedAt)}`
-    : `${new Date(report.generatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}${report.side ? ` · ${SIDE_NAME[report.side]} shoulder` : ''}`;
+    : 'Movement study';
   $('#reportModal').classList.add('show');
   requestAnimationFrame(() => {
     card.scrollTop = 0;
@@ -1711,6 +1710,7 @@ $('#welcomeDemo').onclick = $('#recoverDemo').onclick = startDemo;
 $('#recoverUpload').onclick = () => $('#fileVideo').click();
 $('#welcomeVideo').onclick = () => $('#fileVideo').click();
 $('#mobileQuick').onclick = () => app.rehabReport && !run.active ? openReport(app.rehabReport) : startExam('quick');
+$('#mobileFull').onclick = () => startExam('full');
 $('#sourceMenuButton').onclick = () => {
   const open = $('#sourceMenu').classList.toggle('show');
   $('#sourceMenuButton').setAttribute('aria-expanded', open);
@@ -1750,11 +1750,12 @@ function layoutMobileStage() {
   const dockTarget = mobile ? $('#mobileControls') : $('#stage');
   if ($('#dock').parentElement !== dockTarget) dockTarget.append($('#dock'));
   const chartTarget = mobile ? $('#mobileReadouts') : $('#dock');
+  if (mobile && $('#mobileStart').parentElement !== chartTarget) chartTarget.append($('#mobileStart'));
+  if (!mobile && $('#mobileStart').parentElement !== document.body) document.body.append($('#mobileStart'));
   if ($('#arcWrap').parentElement !== chartTarget) chartTarget.append($('#arcWrap'));
-  document.documentElement.style.setProperty('--sticky-stage-offset', `${$('#stage').getBoundingClientRect().height + $('#mobileControls').getBoundingClientRect().height + 58}px`);
+  document.documentElement.style.setProperty('--sticky-stage-offset', `${$('#stage').getBoundingClientRect().height + $('#mobileControls').getBoundingClientRect().height}px`);
 }
-addEventListener('resize', () => { layoutMobileStage(); anatomy.resize(); positionToast(); boundAnatomyPanel(); });
-addEventListener('scroll', positionToast, { passive: true });
+addEventListener('resize', () => { layoutMobileStage(); anatomy.resize(); boundAnatomyPanel(); });
 addEventListener('beforeunload', () => { pop?.stop(); pose.stop(); });
 
 /* ---------------- init ---------------- */
