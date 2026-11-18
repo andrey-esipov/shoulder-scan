@@ -59,6 +59,10 @@ node test/framing.test.mjs
 node test/arc-chart.test.mjs
 ```
 
+## Contributing
+
+Shoulder Scan is far from finished, and help is welcome. Physical therapists, coaches, and anyone with a cranky joint of their own are especially welcome. [Open an issue](https://github.com/andrey-esipov/shoulder-scan/issues) to suggest a movement it should track, report a bad angle reading, or flag anything that reads like a diagnosis. Pull requests are welcome too. Run the tests above before sending one.
+
 ## Credits and license
 
 - Inspired by [@mirrash7's Hand Doctor](https://x.com/mirrash7/status/2120966294371484037).
