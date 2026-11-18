@@ -74,54 +74,50 @@ function motionRange(motion = {}) {
   return { range: useSide ? side : forward, name: useSide ? 'Side raise' : 'Forward raise' };
 }
 const isCalibration = m => m.calibration || /^calibration$/i.test(m.test || '');
-function motionChart(motion = {}, simulated = false, markers = []) {
+function motionChart(motion = {}, simulated = false, markers = [], preferredSide = 'R') {
   const known = value => Number.isFinite(value) && value >= 0 && value <= 180;
   const { range, name } = motionRange(motion);
-  const value = side => known(range[side]) ? `${Math.round(range[side])}°` : 'Not tested';
-  const reading = side => `<div><strong>${value(side)}</strong><span class="rom-side ${side}">${side} · ${side === 'R' ? 'Right' : 'Left'}</span></div>`;
-  const arcs = ['R', 'L'].map((side, i) => {
-    const r = 132 - i * 22, angle = Math.PI + (range[side] || 0) * Math.PI / 180;
-    return `<path class="rom-track" d="M${180 - r} 150a${r} ${r} 0 0 1 ${r * 2} 0"/>
-      ${known(range[side]) ? `<path class="rom-arc ${side}" pathLength="180" stroke-dasharray="${range[side]} 180" d="M${180 - r} 150a${r} ${r} 0 0 1 ${r * 2} 0"/><circle class="rom-end ${side}" cx="${180 + r * Math.cos(angle)}" cy="${150 + r * Math.sin(angle)}" r="4"/>` : ''}`;
-  }).join('');
-  const ticks = [0, 45, 90, 135, 180].map(deg => {
-    const a = Math.PI + deg * Math.PI / 180;
-    return `<path class="rom-tick" d="M${180 + 143 * Math.cos(a)} ${150 + 143 * Math.sin(a)}l${6 * Math.cos(a)} ${6 * Math.sin(a)}"/>`;
-  }).join('');
-  const missing = ![range.R, range.L].some(known);
-  const symptoms = markers.filter(m => known(m.elevation));
-  const markerTicks = symptoms.map(m => {
-    const r = m.side === 'L' ? 110 : 132, a = Math.PI + m.elevation * Math.PI / 180;
-    const x = 180 + r * Math.cos(a), y = 150 + r * Math.sin(a);
-    return `<g class="rom-marker${isCalibration(m) || m.retracted ? ' calibration' : ''}"><title>${esc(markerText(m).label)} · ${esc(markerText(m).context)}</title><path d="M${180 + (r - 7) * Math.cos(a)} ${150 + (r - 7) * Math.sin(a)}L${180 + (r + 7) * Math.cos(a)} ${150 + (r + 7) * Math.sin(a)}"/><circle cx="${x}" cy="${y}" r="3.5"/></g>`;
-  }).join('');
-  return `<figure class="rp-motion">
-    <figcaption><h4>Range of motion</h4><span>${simulated ? 'Simulated · ' : ''}${name.toLowerCase()}</span></figcaption>
-    <svg class="rom-chart" viewBox="0 0 360 172" role="img" aria-label="Range of motion, ${name.toLowerCase()}: right ${value('R')}, left ${value('L')}">
-      ${ticks}${arcs}${markerTicks}<text x="48" y="169" text-anchor="middle">0°</text><text x="312" y="169" text-anchor="middle">180°</text>
-    </svg>
-    <div class="rom-values">${['R', 'L'].filter(s => known(range[s])).map(reading).join('')}</div>
-    ${['R', 'L'].filter(s => !known(range[s])).map(s => `<p class="rom-untested">${s} · ${s === 'R' ? 'Right' : 'Left'} not tested</p>`).join('')}
-    <p class="rom-note">${missing ? 'No movement measurements recorded.' : `Peak elevation during ${name.toLowerCase()}s.`}</p>
-    ${symptoms.length ? '<p class="rom-marker-key"><i></i> Symptom marks · pale ticks are reference only</p>' : ''}
+  const side = known(range[preferredSide]) ? preferredSide : known(range.R) ? 'R' : known(range.L) ? 'L' : 'R', other = side === 'R' ? 'L' : 'R';
+  const sideName = side === 'R' ? 'Right' : 'Left', otherName = other === 'R' ? 'Right' : 'Left';
+  const symptoms = markers.filter(m => !isCalibration(m) && !m.retracted && known(m.elevation) && m.side === side);
+  const mark = symptoms.find(m => m.type === 'pain') || symptoms[0];
+  let marker = '';
+  if (mark) {
+    const a = Math.PI + mark.elevation * Math.PI / 180;
+    const x = 180 + 140 * Math.cos(a), y = 190 + 140 * Math.sin(a);
+    const lx = Math.max(70, Math.min(290, x)), ly = Math.max(20, y - 25);
+    const type = { pain: 'Pain', click: 'Click', pull: 'Pull', unstable: 'Unstable' }[mark.type] || 'Symptom';
+    marker = `<g class="rom-marker"><title>${esc(markerText(mark).context)}</title><path d="M${x} ${y}L${lx} ${ly + 8}"/><circle cx="${x}" cy="${y}" r="4"/><rect x="${lx - 51}" y="${ly - 12}" width="102" height="23" rx="11"/><text x="${lx}" y="${ly + 4}" text-anchor="middle">${type} ${Math.round(mark.elevation)}°</text></g>`;
+  }
+  const value = known(range[side]) ? `${Math.round(range[side])}°` : 'Not tested';
+  return `<figure class="rp-motion poster-gauge">
+    <figcaption><h4>Peak arm raise</h4><span>${known(range[other]) ? `${otherName} ${Math.round(range[other])}°` : `${otherName} not tested`}${simulated ? ' · simulated' : ''}</span></figcaption>
+    <svg class="rom-chart" viewBox="0 0 360 230" role="img" aria-label="Range of motion, ${name.toLowerCase()}: right ${known(range.R) ? `${Math.round(range.R)}°` : 'not tested'}, left ${known(range.L) ? `${Math.round(range.L)}°` : 'not tested'}${mark ? `; symptom marked at ${Math.round(mark.elevation)} degrees` : ''}">
+      <path class="rom-track" d="M40 190a140 140 0 0 1 280 0"/>
+      ${known(range[side]) ? `<path class="rom-arc" pathLength="180" stroke-dasharray="${range[side]} 180" d="M40 190a140 140 0 0 1 280 0"/>` : ''}
+      <text class="poster-angle" x="180" y="158" text-anchor="middle">${value}</text>
+      <text class="poster-side" x="180" y="181" text-anchor="middle">${sideName} ${name.toLowerCase()}</text>
+      <text x="40" y="215" text-anchor="middle">0°</text><text x="320" y="215" text-anchor="middle">180°</text>${marker}
+    </svg>${known(range[side]) ? '' : '<p class="rom-note">No movement measurements recorded.</p>'}
   </figure>`;
 }
 
 function findingsTiles(report) {
   const markers = arr(report.markers).filter(m => !isCalibration(m) && !m.retracted && Number.isFinite(m.elevation));
-  const pain = markers.filter(m => m.type === 'pain');
   const first = markers.slice().sort((a, b) => (a.t ?? a.elapsed ?? 0) - (b.t ?? b.elapsed ?? 0))[0];
-  const painAngle = pain.length ? Math.min(...pain.map(m => m.elevation)) : null;
   const lead = arr(report.conditions).slice().sort((a, b) => (b.p || 0) - (a.p || 0))[0];
-  const test = arr(report.testResults).find(t => arr(t.symptoms).length);
-  const peaks = Object.values(motionRange(report.motion).range).filter(Number.isFinite);
+  const tests = arr(report.testResults).filter(t => t.result);
+  const test = tests.find(t => t.id === 'hawkins') || tests[0];
+  const { range, name } = motionRange(report.motion);
+  const peaks = Object.values(range).filter(Number.isFinite);
+  const comparison = Number.isFinite(range.R) && Number.isFinite(range.L);
   const tiles = [
-    ['Pain-free range', painAngle == null ? 'Not confirmed' : `0–${Math.round(painAngle)}°*`, painAngle == null ? 'No pain-onset angle recorded' : 'Before first marked pain · estimate only'],
+    ['Pain-free range', 'Not established', 'Symptom marks alone cannot establish a pain-free range.'],
     ['First symptom angle', first ? `${Math.round(first.elevation)}°` : 'None marked', first ? first.context || first.test || 'Free movement' : 'Calibration marks excluded'],
-    ['Strongest test result', test ? test.title : peaks.length ? `${Math.max(...peaks)}° raise` : 'Not assessed', test ? test.symptoms.join(' · ') : peaks.length ? 'Peak recorded movement; no specific positive test' : 'Complete movement tests to assess'],
-    ['Top consideration', lead ? plain(lead.name.replace(/\s*\([^)]*\)/g, '')) : 'Inconclusive', lead ? `${strength(lead.p)} evidence · ${lead.p >= .35 ? 'discuss with a clinician' : 'worth ruling out, not a finding'}` : 'No condition identified'],
+    [test ? 'Test response' : comparison ? 'Side-to-side' : 'Recorded range', test ? test.result : comparison ? `${Math.round(Math.abs(range.R - range.L))}° difference` : peaks.length ? `${Math.round(Math.max(...peaks))}° ${name.toLowerCase()}` : 'Not measured', test ? test.title : comparison ? `Right ${Math.round(range.R)}° · Left ${Math.round(range.L)}°` : 'Peak recorded movement, not a diagnostic test'],
+    [lead?.p >= .35 ? 'Screening consideration' : 'Worth ruling out', lead?.p >= .35 ? plain(lead.name.replace(/\s*\([^)]*\)/g, '')) : 'No clear lead', lead?.p >= .35 ? `${strength(lead.p)} evidence · discuss with a clinician` : 'Weak evidence. Review the possibilities below with a clinician.'],
   ];
-  return `<section class="rp-findings"><h4>What we found</h4><div class="rp-stat-grid">${tiles.map(([label, value, note]) => `<div class="rp-stat"><span>${label}</span><strong>${esc(value)}</strong><small>${esc(note)}</small></div>`).join('')}</div>${painAngle == null ? '' : '<p class="rp-muted rp-range-caveat">*Marker-derived estimate, not a confirmed pain-free range. Unmarked movement may still hurt.</p>'}${report.painReconciliation ? `<p class="rp-reconciliation">${esc(report.painReconciliation)}</p>` : ''}</section>`;
+  return `<section class="rp-findings"><h4>What we found</h4><div class="rp-stat-grid">${tiles.map(([label, value, note]) => `<div class="rp-stat"><span>${label}</span><strong>${esc(value)}</strong><small>${esc(note)}</small></div>`).join('')}</div>${report.painReconciliation ? `<p class="rp-reconciliation">${esc(report.painReconciliation)}</p>` : ''}</section>`;
 }
 
 function markerTimeline(markers) {
@@ -145,14 +141,16 @@ function reportHero(report) {
     : '<div class="rp-anatomy-empty">No anatomy snapshot saved for this session.</div>';
   const completion = report.completion;
   const imageLabel = report.anatomyCapture?.kind === 'bilateral-forward-peaks' ? 'Anatomy at recorded peak · forward raise' : 'Session anatomy';
-  return `<section class="rp-hero">
+  return `<section class="rp-hero rp-poster">
+    <div class="poster-intro"><p class="poster-eyebrow">SHOULDER SCAN / MOVEMENT STUDY</p>
     <h3 class="rp-hero-title">${esc(title)}</h3>
-    <p class="rp-hero-context">${report.nerveReferral ? nerveReferral : incomplete ? `Possible: ${esc(lead?.name || 'not enough evidence yet')}. Finish the exam before drawing conclusions.` : lead?.p >= .35 ? 'A screening pattern to explore with a clinician.' : 'The screen is inconclusive. A clinician can help you understand your symptoms.'}</p>
+    <p class="rp-hero-context">${report.nerveReferral ? nerveReferral : incomplete ? `Possible: ${esc(lead?.name || 'not enough evidence yet')}. Finish the exam before drawing conclusions.` : lead?.p >= .35 ? 'A screening pattern to explore with a clinician.' : 'No clear pattern emerged. Discuss persistent symptoms with a clinician.'}</p>
     <div class="rp-hero-status">${completion?.simulated ? '<span class="rp-simulated">Simulated demo · Not a clinical result</span>' : '<span>Camera angles are estimates</span>'}${completion && completion.completed < completion.total ? `<span>Partial exam: ${completion.completed} of ${completion.total} tests. Results are provisional.</span>` : ''}</div>
-    <div class="rp-hero-visuals">${motionChart(report.motion, completion?.simulated, arr(report.markers))}
+    </div><div class="rp-hero-visuals">${motionChart(report.motion, completion?.simulated, arr(report.markers), report.side)}
       <figure class="rp-anatomy" aria-label="${esc(imageLabel)}"><div class="rp-anatomy-plate">${image}</div></figure>
-      <p class="rp-visual-caption">${imageLabel}${completion?.simulated ? ' · simulated illustration' : ''}</p>
     </div>
+    <p class="rp-visual-caption">${imageLabel} · orange identifies the screened shoulder, not an injury</p>
+    ${findingsTiles(report)}
   </section>`;
 }
 
@@ -202,7 +200,6 @@ export function renderReport(container, report) {
     out.push(`<div class="rp-flags">${flags.map((f) => `<div class="rp-flag ${esc(f.level)}">${f.level === 'emergency' ? '<strong>Call emergency services now</strong><a href="tel:911">Call 911 / your local emergency number</a>' : `<strong>${esc(lvlName[f.level] || 'Get checked')}</strong>`}<span>${esc(flagText(f))}</span></div>`).join('')}</div>`);
   }
 
-  if (!flags.length) out.push(findingsTiles(report));
   if (report.summary && (flags.length || report.nerveReferral || reportHeadline(report) === 'Incomplete screening')) out.push(section('Screening context', `<p class="rp-summary">${md(plain(summaryText(report)))}</p>`));
 
   const conds = (flags.length ? [] : arr(report.conditions)).slice().sort((a, b) => (b.p || 0) - (a.p || 0));
@@ -214,7 +211,7 @@ export function renderReport(container, report) {
     if (rest.length) {
       body += `<details class="rp-sec rp-more"><summary><span>${rest.length} less likely condition${rest.length > 1 ? 's' : ''}</span></summary><div class="rp-conds">${rest.map((c) => condCard(c)).join('')}</div></details>`;
     }
-    out.push(section(main.length ? 'What it could be' : 'Worth ruling out', body));
+    out.push(section(main.length ? 'What it could be' : 'Worth ruling out', body, { open: false }));
   }
 
   const drivers = (flags.length ? [] : arr(report.drivers)).slice().sort((a, b) => (b.p || 0) - (a.p || 0));
@@ -222,28 +219,34 @@ export function renderReport(container, report) {
     out.push(section('Likely drivers', `<p class="rp-muted" style="margin:0 0 8px">Not diagnoses — the reasons the tissue got overloaded. GIRD / IR deficit means less inward rotation on the sore side than the other side.</p><div class="rp-conds">${drivers.map((d) => condCard(d, { driver: true })).join('')}</div>`, { open: false, count: drivers.length }));
   }
 
-  const markers = arr(report.markers).slice().sort((a, b) => (a.t ?? a.elapsed ?? 0) - (b.t ?? b.elapsed ?? 0));
+  const allMarkers = arr(report.markers).slice().sort((a, b) => (a.t ?? a.elapsed ?? 0) - (b.t ?? b.elapsed ?? 0));
+  const markers = allMarkers.filter(m => !isCalibration(m) && !m.retracted);
+  const references = allMarkers.filter(m => isCalibration(m) || m.retracted);
   out.push(section('Your markers', markers.length ? `${markerTimeline(markers)}<ul class="rp-markers">${markers.map(m => {
     const { label, context } = markerText(m);
-    return `<li${isCalibration(m) || m.retracted ? ' class="calibration"' : ''}><strong>${esc(label)}</strong><span>${esc(context)}</span></li>`;
-  }).join('')}</ul>` : '<p class="rp-muted">No symptom markers recorded.</p>', { count: markers.length }));
+    return `<li><strong>${esc(label)}</strong><span>${esc(context)}</span></li>`;
+  }).join('')}</ul>` : '<p class="rp-muted">No symptom markers recorded.</p>', { count: markers.length, open: false }));
+  if (references.length) out.push(section('Reference marks', `<ul class="rp-markers">${references.map(m => {
+    const { label, context } = markerText(m);
+    return `<li class="calibration"><strong>${esc(label)}</strong><span>${esc(context)}</span></li>`;
+  }).join('')}</ul>`, { count: references.length, open: false }));
 
   const plan = arr(report.plan).filter((ph) => arr(ph.items).length || ph.rule);
   if (plan.length && !flags.length) {
-    const body = `<div class="rp-plan">${plan.map((ph) => `<div class="rp-phase">
+    const body = `<div class="rp-plan" id="reportPlan">${plan.map((ph) => `<div class="rp-phase">
       <span class="rp-phase-num">${esc(ph.phase)}</span>
       <div class="rp-phase-title">${esc(phaseTitle(ph))}</div>
       ${ph.rule ? `<p class="rp-phase-rule">${esc(ph.rule)}</p>` : ''}
       <div class="rp-exs">${arr(ph.items).map(exItem).join('')}</div>
     </div>`).join('')}</div>`;
-    out.push(section((conds[0]?.p || 0) < .35 ? 'General movement plan' : 'Rehab plan', body));
+    out.push(section((conds[0]?.p || 0) < .35 ? 'General movement plan' : 'Rehab plan', body, { open: false }));
   }
 
   const serve = (flags.length ? [] : arr(report.serve)).map(txt).filter(Boolean);
   if (serve.length) out.push(section('Serve modifications', `<ul class="rp-list">${serve.map((s) => `<li>${md(s)}</li>`).join('')}</ul>`, { open: false, count: serve.length }));
 
   const next = (flags.length ? [] : arr(report.next)).map(txt).filter(Boolean);
-  if (next.length) out.push(section('Next steps', `<ol class="rp-list">${next.map((s) => `<li>${md(s)}</li>`).join('')}</ol>`));
+  if (next.length) out.push(section('Next steps', `<ol class="rp-list">${next.map((s) => `<li>${md(s)}</li>`).join('')}</ol>${plan.length ? '<button class="btn rp-plan-link" type="button">Open movement plan</button>' : ''}`, { open: false }));
 
   out.push(`<p class="rp-foot">Screening aid, not a diagnosis. ${completion?.simulated ? 'Demo motion and angles are simulated, not clinical measurements.' : 'Camera angles are estimates, not clinical measurements.'} See a sports-medicine doctor or physiotherapist in person for injuries, severe or worsening pain, weakness, numbness, or instability.<br>Bones: BodyParts3D © DBCLS · CC BY-SA 2.1 JP</p>`);
 

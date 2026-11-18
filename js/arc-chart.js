@@ -120,8 +120,10 @@ export class ArcChart {
     const x0 = PAD.l, x1 = w - PAD.r, y0 = PAD.t, y1 = h - PAD.b;
     const pw = Math.max(1, x1 - x0), ph = Math.max(1, y1 - y0);
     const now = this._now();
-    const tStart = now - this.win;
-    const X = (t) => x0 + ((t - tStart) / this.win) * pw;
+    const first = Math.min(this.data[0]?.t ?? now, this.marks[0]?.t ?? now);
+    const tStart = Math.max(first, now - this.win);
+    const span = Math.max(4, now - tStart);
+    const X = (t) => x0 + ((t - tStart) / span) * pw;
     const Y = (v, s) => y1 - ((v - s.min) / (s.max - s.min)) * ph;
 
     ctx.font = '500 11px Inter, system-ui, sans-serif';

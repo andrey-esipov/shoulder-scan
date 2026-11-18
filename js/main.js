@@ -301,6 +301,7 @@ const setSource = (id) => {
   $('.exam-start-quick')?.classList.toggle('primary', !!id);
   $('#three').inert = !id;
   document.body.classList.toggle('source-inactive', app.source === 'off');
+  document.body.classList.toggle('camera-recovery', !!app.cameraError || app.cameraStatus === 'Starting camera…' && id === 'btnCamera');
   $('#sourceMenuButton').textContent = 'Source';
   $('#sourceMenuButton').title = `Source: ${id === 'btnDemo' ? 'Demo' : id === 'btnUpload' ? 'Upload video' : id === 'btnCamera' ? 'Live camera' : 'not selected'}`;
   if (!app.safetyPaused) {
@@ -527,8 +528,9 @@ const AV_USER = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" str
 const AV_SYS = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>';
 const chatLog = $('#chatLog');
 const scrollChat = () => {
-  chatLog.scrollTop = chatLog.scrollHeight;
-  requestAnimationFrame(() => { chatLog.scrollTop = chatLog.scrollHeight; });
+  const scroll = () => { chatLog.scrollTop = !run.active && document.body.classList.contains('camera-recovery') ? 0 : chatLog.scrollHeight; };
+  scroll();
+  requestAnimationFrame(scroll);
 };
 function examContext(question) {
   const context = $('#examContext');
@@ -536,6 +538,8 @@ function examContext(question) {
     ? `Test ${run.idx + 1} of ${run.list.length} · ${run.test.title}`
     : $('#progressIntakeLabel').textContent;
   $('.context-question', context).textContent = question;
+  const previous = $$('.msg.user .bubble', chatLog).at(-1)?.textContent;
+  $('.context-previous', context).textContent = run.phase === 'intake' && previous ? `Last answer: ${previous}` : '';
   if (matchMedia('(max-width: 700px)').matches) requestAnimationFrame(() => context.scrollIntoView({ block: 'start', behavior: 'instant' }));
 }
 
@@ -1114,7 +1118,6 @@ async function runTest(t, i, n) {
   renderCard(t, i, n);
   $('#hudTitle').textContent = t.title;
   $('#hudSub').textContent = t.steps[0].replace(/\*\*/g, '');
-  arc.clear();
   if (app.source === 'off') system('Camera is off. Press **Camera** (or **Demo**) at the top so I can measure. You can still press Done / Skip.');
   voice.speak(app.source === 'demo' && t.id === 'calib' ? 'Watch the shoulders resting at their sides. Simulated calibration runs automatically.'
     : exam.intake.overheadSport === 'yes' ? t.say : t.say.replace('This one matters for your serve. ', ''));
@@ -1333,7 +1336,8 @@ function currentReport() {
       const answers = [].concat(rec.follow?.[q.id] ?? []);
       return q.opts.filter(o => answers.includes(o.v) && !['none', 'no', 'unsure'].includes(o.v)).map(o => o.label);
     });
-    return { title: test?.title || id, symptoms };
+    const pain = [].concat(rec.follow?.pain ?? []).filter(v => !['none', 'no', 'unsure'].includes(v));
+    return { id, title: test?.title || id, symptoms, result: pain.length ? 'Pain reproduced' : null };
   });
   report.motion = reportMotion(exam);
   report.anatomySnapshot = exam.anatomySnapshot || null;
@@ -1366,6 +1370,12 @@ function openReport(report) {
     return;
   }
   renderReport($('#reportBody'), report);
+  $('.rp-plan-link', $('#reportBody'))?.addEventListener('click', () => {
+    const plan = $('#reportPlan');
+    plan.closest('details').open = true;
+    plan.closest('details').querySelector('summary').focus();
+    plan.scrollIntoView({ block: 'start', behavior: 'instant' });
+  });
   if (report.flags?.length) $('#reportSafety').append($('#reportBody .rp-flags'));
   $('#reportModal').classList.toggle('safety-report', !!report.flags?.length);
   $('#reportTitle').textContent = report.flags?.length ? 'Safety report' : 'Shoulder Scan';
@@ -1591,7 +1601,7 @@ function switchTab(tab) {
   if (tab === 'rehab') {
     renderRehab();
     $('#rehabView').scrollTop = 0;
-    if (matchMedia('(max-width: 700px)').matches) requestAnimationFrame(() => $('#rehabView').scrollIntoView({ block: 'start', behavior: 'instant' }));
+    if (matchMedia('(max-width: 700px)').matches) window.scrollTo({ top: 0, behavior: 'instant' });
   }
 }
 $('#tabExam').onclick = () => switchTab('exam');
@@ -1754,7 +1764,9 @@ $('#timelineSide').onclick = () => { setSide(other(app.side), true); arc.clear()
 const quickObserver = new IntersectionObserver(entries => {
   for (const entry of entries) entry.target.dataset.inView = String(entry.isIntersecting);
   document.body.classList.toggle('quick-in-view', !!$('.exam-start-quick[data-in-view="true"]'));
-}, { threshold: .6 });
+  document.body.classList.toggle('panel-in-view', $('.tabs').dataset.inView === 'true');
+}, { threshold: 0 });
+quickObserver.observe($('.tabs'));
 new MutationObserver(() => {
   $$('.exam-start-quick:not([data-observed])').forEach(button => {
     button.dataset.observed = 'true'; quickObserver.observe(button);
@@ -1781,7 +1793,7 @@ anatomy.setIdle(true);
   go('Quick exam (4–6 min)', 'quick', app.source !== 'off');
   go('Full exam (12–15 min)', 'full');
   $('.bubble', chatLog.lastElementChild).append(box);
-  scrollChat();
+  requestAnimationFrame(() => { if (!run.active) chatLog.scrollTop = 0; });
   if (new URLSearchParams(location.search).get('exam') === 'quick') startExam('quick');
 })();
 window.__shoulder = { app, exam, run, anatomy, pose, handleMetrics, startDemo, openReport, buildReport };

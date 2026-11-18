@@ -546,7 +546,7 @@ export function createAnatomy(container, { onHover, onReady } = {}) {
 
   // ---------- Presets & camera ----------
   const PRESETS = {
-    full: { layers: { muscles: 0, nerves: 0, tendons: 0, skin: .18, cuff: .15 }, cam: HOME },
+    full: { layers: { muscles: 0, nerves: 0, tendons: 0, skin: .18, cuff: .35 }, cam: HOME },
     muscles: { layers: { skin: 0, muscles: .35, nerves: 0, bones: 1, labrum: 0.3 }, cam: { pos: V(46, 24, 42), target: V(16, -3, -4) } },
     cuff: { layers: { skin: 0, muscles: 0, cuff: 1, tendons: 0, nerves: 0, labrum: 0.15 }, focus: ['supraspinatus', 'infraspinatus', 'teresMinor', 'subscapularis', 'bursa'],
       cam: { pos: V(46, 24, 42), target: V(16, -3, -4) } },
@@ -1017,7 +1017,7 @@ export function createAnatomy(container, { onHover, onReady } = {}) {
           root.scale.x = savedFrame.side === 'L' ? -1 : 1;
           applyPreset('full', { frame: false });
           layerVal.bones = 1; layerVal.cuff = 1; layerVal.skin = 0; ghost = {};
-          focus = new Set();
+          focus = new Set(['supraspinatus', 'infraspinatus', 'teresMinor', 'subscapularis']);
           applyVisibility();
           Object.assign(stress, savedFrame.stress);
           trunk.rotation.set(torsoC.flex * DEG2RAD, -torsoC.yaw * DEG2RAD, -torsoC.lean * DEG2RAD, 'YXZ');

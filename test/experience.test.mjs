@@ -85,14 +85,14 @@ renderReport(container, {
 });
 assert.match(container.innerHTML, /Worth ruling out/);
 assert.match(container.innerHTML, /Weak evidence/);
-assert.match(container.innerHTML, /rom-untested[^>]*>L · Left not tested/);
+assert.match(container.innerHTML, /Left not tested/);
 assert.ok(container.innerHTML.indexOf('What we found') < container.innerHTML.indexOf('Worth ruling out'), 'findings tiles precede hypotheses');
 assert.doesNotMatch(container.innerHTML, /Symptoms by arm angle/, 'one marker belongs on the gauge, not an empty timeline');
 assert.match(container.innerHTML, /rom-marker/, 'symptoms are overlaid on the gauge');
 assert.match(container.innerHTML, /Pain-free range/);
 assert.match(container.innerHTML, /First symptom angle/);
-assert.match(container.innerHTML, /Strongest test result/);
-assert.match(container.innerHTML, /Top consideration/);
+assert.match(container.innerHTML, /Recorded range/);
+assert.doesNotMatch(container.innerHTML, /Top consideration/);
 assert.match(container.innerHTML, /R Pain · 88°/, 'report retains the press-time angle');
 assert.doesNotMatch(container.innerHTML, /rp-summary/, 'inconclusive reports do not repeat the hero summary');
 report.conditions.push({ name: 'Lower likelihood', p: .34 });
@@ -123,9 +123,17 @@ assert.equal(collectMarkers({ sessionMarkers: sessionMarks, freeMarkers: [sessio
 renderReport(container, { ...inconclusive, markers: retained, motion: { forward: { R: 160 } } });
 assert.match(container.innerHTML, /Demo motion · Forward raise/);
 assert.match(container.innerHTML, /Calibration · reference only/);
-assert.match(container.innerHTML, /Symptoms by arm angle/, 'three markers justify a separate timeline');
+assert.doesNotMatch(container.innerHTML, /Symptoms by arm angle/, 'calibration is not a symptom');
+assert.match(container.innerHTML, /Your markers<span class="rp-count">2/);
+assert.match(container.innerHTML, /Reference marks/);
+assert.equal((container.innerHTML.match(/class="rom-marker"/g) || []).length, 1, 'one primary symptom anchors the gauge');
 assert.match(container.innerHTML, /First symptom angle<\/span><strong>119°/, 'calibration cannot become headline symptom evidence');
-assert.match(container.innerHTML, /0–119°/);
+assert.match(container.innerHTML, /Not established/, 'symptom marks alone cannot prove a pain-free range');
+renderReport(container, { ...inconclusive, testResults: [{ id: 'flex', title: 'Forward raise', symptoms: ['Shoulder blade/lat'] }, { id: 'hawkins', title: 'Hawkins test', result: 'Pain reproduced' }], plan: [{ phase: 1, items: [{ name: 'Comfortable movement' }] }] });
+assert.match(container.innerHTML, /Pain reproduced/);
+assert.match(container.innerHTML, /Hawkins test/);
+assert.doesNotMatch(container.innerHTML, /<strong>Forward raise<\/strong>/);
+assert.match(container.innerHTML, /<details class="rp-sec"><summary><span>General movement plan/);
 const withdrawn = { ...sessionMarks[2] }, rec = { markers: [withdrawn], follow: {} };
 reconcilePain(rec, 'pain', false);
 assert.equal(withdrawn.retracted, true);
@@ -185,7 +193,7 @@ const portrait = {
   anatomySnapshot: 'data:image/png;base64,iVBORw0KGgo=',
 };
 renderReport(container, portrait);
-assert.match(container.innerHTML, /class="rp-hero"/);
+assert.match(container.innerHTML, /class="rp-hero rp-poster"/);
 assert.match(container.innerHTML, /153°.*170°/s, 'both shoulders retain their own measured values');
 assert.match(container.innerHTML, /role="img".*Range of motion/s);
 assert.match(container.innerHTML, /class="rp-anatomy-image".*data:image\/png;base64/);
@@ -201,8 +209,10 @@ assert.deepEqual(reportMotion({ tests: {
 assert.deepEqual(reportMotion({ tests: { flex: { complete: false, sides: { R: { maxElev: 100 } } } } }).forward, { R: null, L: null });
 renderReport(container, { ...portrait, motion: { forward: {}, side: { R: 145, L: 160 } } });
 assert.match(container.innerHTML, /Range of motion, side raise: right 145°, left 160°/);
+renderReport(container, { ...portrait, motion: { forward: {}, side: { R: 145 } } });
+assert.match(container.innerHTML, /Recorded range<\/span><strong>145° side raise/);
 renderReport(container, portrait);
-assert.match(container.innerHTML, /Peak elevation during forward raises/);
+assert.match(container.innerHTML, /Right forward raise/);
 assert.doesNotMatch(container.innerHTML, /Side raise · R/);
 const arcEvidence = painArcEvidence({ follow: { arc: 'top' }, markers: [
   { type: 'pain', side: 'R', elevation: 111 }, { type: 'pain', side: 'R', elevation: 69 },

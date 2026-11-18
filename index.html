@@ -178,7 +178,7 @@ FORM: B · Stage first. -->
     </div>
 
     <div id="examView" class="view" role="tabpanel" aria-labelledby="tabExam">
-      <div id="examContext" aria-live="polite"><span class="context-step"></span><strong class="context-question"></strong></div>
+      <div id="examContext" aria-live="polite"><span class="context-step"></span><strong class="context-question"></strong><small class="context-previous"></small></div>
       <div id="examProgress" hidden aria-label="Exam progress">
         <div class="exam-progress-labels"><span id="progressIntakeLabel">Intake</span><span id="progressTestsLabel">Movement tests</span></div>
         <div class="exam-progress-tracks"><span id="progressIntakeTrack"><i id="progressIntake"></i></span><span id="progressTestsTrack"><i id="progressTests"></i></span></div>
@@ -224,8 +224,8 @@ FORM: B · Stage first. -->
         <div id="reportMeta" class="modal-meta"></div>
       </div>
       <div class="modal-actions">
-        <button id="btnPrint" class="btn sm ghost" type="button">Print / PDF</button>
-        <button id="btnExport" class="btn sm" type="button">Export data</button>
+        <button id="btnPrint" class="btn sm ghost" type="button" aria-label="Print / PDF" title="Print / PDF"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M7 8V3h10v5M7 16H4V9h16v7h-3M7 13h10v8H7z"/></svg><span>Print / PDF</span></button>
+        <button id="btnExport" class="btn sm" type="button" aria-label="Export data" title="Export data"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 15v6h14v-6"/></svg><span>Export data</span></button>
         <button id="btnCloseReport" class="btn icon sm ghost" type="button" aria-label="Close report">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
         </button>
